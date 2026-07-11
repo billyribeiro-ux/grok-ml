@@ -1,6 +1,12 @@
-"""Aether decision engine — offline-first, data-pluggable."""
+"""Aether engine package."""
 
-from aether.engine.types import Mode, Side, Signal, Bar
-from aether.engine.money import Money
+from aether.engine.pipeline import PipelineResult, run_offline_pipeline
+from aether.engine.types import Mode, Side, Signal
 
-__all__ = ["Mode", "Side", "Signal", "Bar", "Money"]
+__all__ = [
+    "Mode",
+    "Side",
+    "Signal",
+    "PipelineResult",
+    "run_offline_pipeline",
+]

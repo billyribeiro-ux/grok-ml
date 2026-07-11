@@ -120,16 +120,40 @@ def load_symbol_history_from_eod_bulk(
     return out.reset_index(drop=True)
 
 
+def _panel_cache_dir() -> Path:
+    from aether.paths import FEATURE_STORE
+
+    d = FEATURE_STORE / "eod_panel_cache"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _panel_cache_key(
+    symbols: list[str],
+    dates: list[date],
+    max_days: int | None,
+) -> str:
+    import hashlib
+
+    syms = ",".join(sorted({s.upper() for s in symbols}))
+    d0 = dates[0].isoformat() if dates else "none"
+    d1 = dates[-1].isoformat() if dates else "none"
+    payload = f"{syms}|n={len(dates)}|{d0}|{d1}|max={max_days}"
+    return hashlib.sha1(payload.encode()).hexdigest()[:20]
+
+
 def load_core_panel_from_eod_bulk(
     symbols: list[str],
     start: date | str | None = None,
     end: date | str | None = None,
     max_days: int | None = None,
+    use_cache: bool = True,
 ) -> pd.DataFrame:
     """
     Load a multi-symbol daily panel for a date range (one pass over day files).
 
-    More efficient than per-symbol scans for F1 core.
+    More efficient than per-symbol scans for F1 core. Optional parquet cache under
+    LaCie feature_store — invalidated when eod_bulk date span/count changes.
     """
     require_lacie()
     if isinstance(start, str):
@@ -144,6 +168,19 @@ def load_core_panel_from_eod_bulk(
         dates = [d for d in dates if d <= end]
     if max_days is not None and len(dates) > max_days:
         dates = dates[-max_days:]
+
+    cache_path: Path | None = None
+    if use_cache and dates:
+        try:
+            key = _panel_cache_key(list(symbols), dates, max_days)
+            cache_path = _panel_cache_dir() / f"panel_{key}.parquet"
+            if cache_path.exists() and cache_path.stat().st_size > 1000:
+                cached = pd.read_parquet(cache_path)
+                if not cached.empty and "symbol" in cached.columns:
+                    return cached.sort_values(["symbol", "date"]).reset_index(drop=True)
+        except Exception:
+            # cache is acceleration only — never fail the load path
+            cache_path = None
 
     want = set(symbols)
     frames: list[pd.DataFrame] = []
@@ -175,4 +212,10 @@ def load_core_panel_from_eod_bulk(
             columns=["symbol", "date", "open", "high", "low", "close", "adj_close", "volume"]
         )
     out = pd.concat(frames, ignore_index=True)
-    return out.sort_values(["symbol", "date"]).reset_index(drop=True)
+    out = out.sort_values(["symbol", "date"]).reset_index(drop=True)
+    if use_cache and cache_path is not None:
+        try:
+            out.to_parquet(cache_path, index=False)
+        except Exception:
+            pass
+    return out

@@ -14,15 +14,21 @@ import pandas as pd
 FEATURE_COLS = (
     "ret_1d",
     "ret_5d",
+    "ret_10d",
     "ret_20d",
+    "mom_60d",
     "px_vs_sma20",
     "px_vs_sma50",
     "sma20_vs_sma50",
     "atr_pct",
     "range_pos_20d",
+    "dist_from_20d_high",
+    "dist_from_20d_low",
     "vol_z_20",
+    "vol_trend_5_20",
     "rsi_14",
     "rvol_20",
+    "vol_of_vol_20",
     "gap_pct",
     "above_sma200",
     "trend_stack",
@@ -30,6 +36,22 @@ FEATURE_COLS = (
     "uncertainty",
     "vol_regime",
     "trend_energy",
+    # Optional static TTM fundamentals (Session B freeze) — only used if present
+    "fund_gross_margin",
+    "fund_op_margin",
+    "fund_net_margin",
+    "fund_roe",
+    "fund_roa",
+    "fund_current_ratio",
+    "fund_debt_equity",
+    "fund_pe",
+    "fund_pb",
+    "fund_ps",
+    "fund_ev_sales",
+    "fund_ev_ebitda",
+    "fund_ev_fcf",
+    "fund_net_debt_ebitda",
+    "fund_income_quality",
 )
 
 
@@ -56,7 +78,13 @@ class LogisticScorer:
         cols = [c for c in self.feature_cols if c in df.columns]
         if not cols:
             raise ValueError("no feature columns present")
-        x = df[cols].astype(float).to_numpy()
+        work = df[cols].astype(float).copy()
+        # Static fund_* freezes are often missing for ETFs — fill so price rows
+        # are not dropped; zeros are neutral after z-score standardization.
+        fund_cols = [c for c in cols if c.startswith("fund_")]
+        if fund_cols:
+            work[fund_cols] = work[fund_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        x = work.to_numpy()
         y = df[self.label_col].astype(float).to_numpy()
         mask = np.isfinite(x).all(axis=1) & np.isfinite(y)
         return x[mask], y[mask], cols
@@ -109,3 +137,37 @@ class LogisticScorer:
         out["p_up"] = self.predict_proba(out)
         out["p_down"] = 1.0 - out["p_up"]
         return out
+
+    def coefficient_table(self) -> list[dict]:
+        """Honest feature weights for cockpit explainability (scaled logistic)."""
+        if self.w is None or self.mu is None or self.sig is None:
+            return []
+        rows: list[dict] = []
+        for i, name in enumerate(self.feature_cols):
+            w = float(self.w[i])
+            sig = float(self.sig[i]) if self.sig[i] else 1.0
+            rows.append(
+                {
+                    "feature": name,
+                    "weight": round(w, 6),
+                    "abs_weight": round(abs(w), 6),
+                    "mean": round(float(self.mu[i]), 6),
+                    "std": round(sig, 6),
+                    # effect of +1 raw-std move on logit
+                    "logit_per_std": round(w, 6),
+                }
+            )
+        rows.sort(key=lambda r: r["abs_weight"], reverse=True)
+        return rows
+
+    def export_model(self) -> dict:
+        return {
+            "type": "logistic",
+            "label_col": self.label_col,
+            "feature_cols": list(self.feature_cols),
+            "bias": float(self.b),
+            "lr": self.lr,
+            "epochs": self.epochs,
+            "l2": self.l2,
+            "coefficients": self.coefficient_table(),
+        }

@@ -1,0 +1,129 @@
+/* AETHER TERMINAL — institutional black × amber phosphor density */
+
+:root {
+	--bg-void: #020408;
+	--bg-deep: #05080e;
+	--bg-panel: #0a0e16;
+	--bg-elevated: #0f1520;
+	--bg-hover: #141c2a;
+	--bg-input: #080c14;
+
+	--border: rgba(120, 160, 220, 0.12);
+	--border-bright: rgba(180, 210, 255, 0.22);
+	--border-amber: rgba(255, 176, 32, 0.35);
+	--border-cyan: rgba(34, 211, 238, 0.28);
+
+	--text: #e6edf7;
+	--text-dim: #8b97a8;
+	--text-mute: #5a6578;
+	--text-faint: #3d4656;
+
+	--amber: #ffb020;
+	--amber-dim: #c4841a;
+	--amber-glow: rgba(255, 176, 32, 0.15);
+	--cyan: #22d3ee;
+	--cyan-dim: #0e7490;
+	--green: #00e676;
+	--green-dim: #00a853;
+	--red: #ff3b45;
+	--red-dim: #b91c1c;
+	--blue: #4f8cff;
+	--magenta: #e879f9;
+	--violet: #a78bfa;
+
+	--font-ui: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+	--font-mono: 'IBM Plex Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+
+	--r: 2px;
+	--header-h: 42px;
+	--ticker-h: 28px;
+	--fkey-h: 26px;
+	--status-h: 28px;
+	--gap: 4px;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	background: var(--bg-void);
+	color: var(--text);
+	font-family: var(--font-ui);
+	font-size: 12px;
+	line-height: 1.35;
+	-webkit-font-smoothing: antialiased;
+	overflow: hidden;
+}
+
+/* subtle phosphor grain */
+body::before {
+	content: '';
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	opacity: 0.035;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* scanline veil */
+body::after {
+	content: '';
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 9998;
+	opacity: 0.04;
+	background: repeating-linear-gradient(
+		0deg,
+		transparent,
+		transparent 2px,
+		rgba(0, 0, 0, 0.35) 2px,
+		rgba(0, 0, 0, 0.35) 3px
+	);
+}
+
+code,
+.mono {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.pos {
+	color: var(--green);
+}
+.neg {
+	color: var(--red);
+}
+.neu {
+	color: var(--text-dim);
+}
+.amber {
+	color: var(--amber);
+}
+.cyan {
+	color: var(--cyan);
+}
+
+/* scrollbars — terminal thin */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+	background: #243044;
+	border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #3a4d68;
+}
