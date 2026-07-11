@@ -34,7 +34,16 @@ python -m aether.cli f1 --start 2019-01-01 --end 2026-07-10
 
 # unit tests (no LaCie required)
 pytest -q
+
+# offline engine flight (mock data — no LaCie, no downloads)
+python -m aether.cli engine-flight
 ```
+
+### Engine (data-pluggable)
+- `packages/aether/engine/` — types, money (cents), data protocol, mock source,
+  labels, regime state, risk governor, policy (STAND_DOWN default), execution costs,
+  paper backtest, offline pipeline
+- Swap `MockDailySource` → `LacieEodBulkSource` later without rewriting the brain
 
 Processed output (LaCie, not git):
 - `/Volumes/LaCie/Aether/data/processed/feature_store/`

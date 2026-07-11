@@ -1,4 +1,4 @@
-"""CLI entrypoints for F0/F1."""
+"""CLI entrypoints for F0/F1 + offline engine flight."""
 
 from __future__ import annotations
 
@@ -101,10 +101,38 @@ def cmd_f1_features(argv: list[str] | None = None) -> None:
         raise
 
 
+def cmd_engine_flight(argv: list[str] | None = None) -> None:
+    """Offline engine flight on MockDailySource (no LaCie required)."""
+    parser = argparse.ArgumentParser(description="Aether offline engine flight (mock data)")
+    parser.add_argument("--symbols", default="SPY,QQQ,IWM,SQQQ,TZA,SH")
+    parser.add_argument("--equity", type=float, default=100_000.0)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    from aether.engine.mock_data import MockDailySource
+    from aether.engine.pipeline import run_offline_pipeline
+
+    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    src = MockDailySource(symbols=symbols)
+    result = run_offline_pipeline(source=src, symbols=symbols, start_equity_usd=args.equity)
+    stats = result.backtest.stats
+    if args.json:
+        print(json.dumps(stats, indent=2))
+    else:
+        print("Aether offline engine flight (MOCK data)")
+        print(f"  symbols: {symbols}")
+        print(f"  feature rows: {len(result.features)}")
+        print(f"  label rows: {len(result.labels)}")
+        for k, v in stats.items():
+            print(f"  {k}: {v}")
+        print("  note: mock paths — not live edge. Engine plumbing verified.")
+    sys.exit(0)
+
+
 def main() -> None:
-    """Optional unified entry: python -m aether.cli integrity|f1"""
+    """Unified entry: python -m aether.cli integrity|f1|engine-flight"""
     if len(sys.argv) < 2:
-        print("usage: python -m aether.cli [integrity|f1] …")
+        print("usage: python -m aether.cli [integrity|f1|engine-flight] …")
         sys.exit(2)
     cmd = sys.argv[1]
     rest = sys.argv[2:]
@@ -112,6 +140,8 @@ def main() -> None:
         cmd_integrity(rest)
     elif cmd in ("f1", "f1-features"):
         cmd_f1_features(rest)
+    elif cmd in ("engine-flight", "flight", "engine"):
+        cmd_engine_flight(rest)
     else:
         print(f"unknown command: {cmd}")
         sys.exit(2)
