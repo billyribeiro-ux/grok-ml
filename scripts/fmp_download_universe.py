@@ -31,7 +31,12 @@ if not API_KEY:
     raise SystemExit("FMP_API_KEY missing from .env")
 
 BASE = "https://financialmodelingprep.com/stable"
-DATA = ROOT / "data" / "fmp"
+# Prefer LaCie primary archive; local only if drive unmounted
+_LACIE = Path("/Volumes/LaCie/Aether/data/raw/fmp/universe")
+if Path("/Volumes/LaCie/Aether").exists():
+    DATA = _LACIE.parent  # /.../fmp  (matches historical layout under data/fmp)
+else:
+    DATA = ROOT / "data" / "fmp"
 ASOF = date(2026, 7, 10)
 START = ASOF - timedelta(days=365 * 5 + 2)  # ~5 years
 

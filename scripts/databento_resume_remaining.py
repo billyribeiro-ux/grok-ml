@@ -32,7 +32,13 @@ ASOF = date(2026, 7, 10)
 BUDGET = 125.0
 ALREADY_SPENT = 67.579835772515  # from ledger completed items
 
-OUT = Path(os.getenv("DATABENTO_DATA_DIR", str(ROOT / "data" / "databento")))
+_LACIE_DB = Path("/Volumes/LaCie/Aether/data/raw/databento")
+_DEFAULT = _LACIE_DB if _LACIE_DB.parent.parent.parent.exists() else (ROOT / "data" / "databento")
+# Prefer env, then LaCie, refuse accidental local if LaCie mounted
+if Path("/Volumes/LaCie/Aether").exists():
+    OUT = Path(os.getenv("DATABENTO_DATA_DIR", str(_LACIE_DB)))
+else:
+    OUT = Path(os.getenv("DATABENTO_DATA_DIR", str(ROOT / "data" / "databento")))
 PURCHASED = OUT / "purchased"
 PURCHASED.mkdir(parents=True, exist_ok=True)
 LEDGER = OUT / "purchase_ledger_resume.json"

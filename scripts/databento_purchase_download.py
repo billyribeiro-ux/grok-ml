@@ -31,7 +31,12 @@ import databento as db
 
 ASOF = date(2026, 7, 10)
 BUDGET = 125.0
-OUT = ROOT / "data" / "databento" / "purchased"
+# Prefer LaCie; data/databento is a symlink when configured
+_LACIE = Path("/Volumes/LaCie/Aether/data/raw/databento/purchased")
+if Path("/Volumes/LaCie/Aether").exists():
+    OUT = _LACIE
+else:
+    OUT = ROOT / "data" / "databento" / "purchased"
 OUT.mkdir(parents=True, exist_ok=True)
 
 TIER_A = ["NVDA", "TSLA", "AAPL", "SPY", "QQQ"]
