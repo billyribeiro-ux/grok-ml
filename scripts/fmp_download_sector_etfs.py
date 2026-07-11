@@ -31,7 +31,9 @@ if not API_KEY:
     raise SystemExit("FMP_API_KEY missing")
 
 BASE = "https://financialmodelingprep.com/stable"
-DATA = ROOT / "data" / "fmp" / "sector_etfs"
+# Prefer LaCie (primary archive); local only if drive unmounted
+_LACIE = Path("/Volumes/LaCie/Aether/data/raw/fmp/sector_etfs")
+DATA = _LACIE if Path("/Volumes/LaCie/Aether").exists() else (ROOT / "data" / "fmp" / "sector_etfs")
 ASOF = date(2026, 7, 10)
 START = ASOF - timedelta(days=365 * 5 + 2)
 
