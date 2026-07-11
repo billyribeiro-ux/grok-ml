@@ -3,7 +3,8 @@
 Aether — Parallel multi-year eod-bulk archive (pre FMP Ultimate expiry 2026-07-12).
 
 Friday 2026-07-10 is the last US equity session before sub dies Sunday.
-Pull every weekday full-market EOD CSV for ~5y. Skip-if-exists. LaCie only.
+Default history: 2019-01-01 → 2026-07-10 (regime shift / COVID / post-COVID / 2022 bear /
+AI melt-up). Override with FMP_EOD_START / FMP_EOD_END. Skip-if-exists. LaCie only.
 
 OUT: /Volumes/LaCie/Aether/data/raw/fmp/archive_expiry/eod_bulk/{YYYY-MM-DD}.csv
 """
@@ -15,7 +16,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -29,9 +30,27 @@ if not API_KEY:
 
 BASE = "https://financialmodelingprep.com/stable"
 ASOF = date(2026, 7, 10)
-YEARS = int(os.getenv("FMP_EOD_YEARS", "5"))
-WORKERS = int(os.getenv("FMP_EOD_WORKERS", "12"))
-RPS = float(os.getenv("FMP_EOD_RPS", "18"))  # stay under 3000/min with other jobs
+
+
+def _parse_date(s: str | None, default: date) -> date:
+    if not s:
+        return default
+    return datetime.strptime(s.strip(), "%Y-%m-%d").date()
+
+
+# Prefer explicit start (2019+) over YEARS. YEARS kept for backward compat.
+END = _parse_date(os.getenv("FMP_EOD_END"), ASOF)
+if os.getenv("FMP_EOD_START"):
+    START = _parse_date(os.getenv("FMP_EOD_START"), date(2019, 1, 1))
+else:
+    years = int(os.getenv("FMP_EOD_YEARS", "0"))
+    if years > 0:
+        START = END - timedelta(days=365 * years + 30)
+    else:
+        START = date(2019, 1, 1)  # default: deep history through regime change
+
+WORKERS = int(os.getenv("FMP_EOD_WORKERS", "3"))
+RPS = float(os.getenv("FMP_EOD_RPS", "2.5"))  # eod-bulk is heavy; stay gentle
 
 OUT = Path("/Volumes/LaCie/Aether/data/raw/fmp/archive_expiry/eod_bulk")
 if not Path("/Volumes/LaCie/Aether").exists():
@@ -82,7 +101,9 @@ def pull_day(d: date) -> str:
                 timeout=300,
             )
             if r.status_code == 429:
-                time.sleep(min(120, 2 ** min(attempt, 6)))
+                wait = min(180, 3 * (2 ** min(attempt, 6)))
+                print(f"  429 {d} wait {wait}s", flush=True)
+                time.sleep(wait)
                 continue
             if r.status_code == 200 and len(r.content) > 1000:
                 tmp = path.with_suffix(".csv.partial")
@@ -120,20 +141,27 @@ def pull_day(d: date) -> str:
 
 
 def main() -> int:
-    start = ASOF - timedelta(days=365 * YEARS + 30)
+    if START > END:
+        raise SystemExit(f"START {START} > END {END}")
     days: list[date] = []
-    d = start
-    while d <= ASOF:
+    d = START
+    while d <= END:
         if d.weekday() < 5:
             days.append(d)
         d += timedelta(days=1)
     # newest first — lock Friday + recent history before deep history
     days.sort(reverse=True)
     print("=" * 70, flush=True)
-    print("PARALLEL EOD-BULK PRE-EXPIRY ARCHIVE", flush=True)
-    print(f"  range {start} → {ASOF}  weekdays={len(days)}", flush=True)
+    print("PARALLEL EOD-BULK PRE-EXPIRY ARCHIVE (deep history)", flush=True)
+    print(f"  range {START} → {END}  weekdays={len(days)}", flush=True)
     print(f"  OUT={OUT}  workers={WORKERS} rps={RPS}", flush=True)
-    print(f"  already present: {sum(1 for x in days if (OUT / f'{x.isoformat()}.csv').exists())}", flush=True)
+    present = sum(
+        1
+        for x in days
+        if (OUT / f"{x.isoformat()}.csv").exists()
+        and (OUT / f"{x.isoformat()}.csv").stat().st_size > 1000
+    )
+    print(f"  already present: {present}  remaining≈{len(days) - present}", flush=True)
     print("=" * 70, flush=True)
 
     t0 = time.time()

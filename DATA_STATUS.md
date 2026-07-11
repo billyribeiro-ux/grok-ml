@@ -24,18 +24,30 @@ Never store paid Databento / FMP archives only on the Mac internal drive.
 | Universe core | `universe/` | longs + inverses |
 | Friday EOD bulk day | `archive_expiry/eod_bulk/2026-07-10.csv` | full market ~59k rows |
 
+## History depth (explicit)
+
+| Layer | Range | Notes |
+|-------|-------|--------|
+| **Full-market eod-bulk** | **2019-01-01 → 2026-07-10** | ~1960 weekdays; primary scanner history |
+| Core deep history (per symbol) | 2019-01-01 → 2026-07-10 | after eod-bulk; `deep_history_2019/` |
+| Earlier packs (ultimate/IWM/etc.) | mostly ~5y (~2021+) | still useful; eod-bulk covers older marketwide |
+
+Why 2019: pre-COVID → COVID crash → recovery → 2022 bear → AI regime.  
+2020 alone is not enough for “how regimes changed.”
+
 ## Running overnight / weekend (pre-expiry)
 
 | Job | Log | Output |
 |-----|-----|--------|
-| **Parallel 5y eod-bulk** (~1326 weekdays) | `logs/eod_bulk_parallel.log` | `archive_expiry/eod_bulk/` |
-| Max remaining bulk/FX/crypto/dirs | `logs/archive_max_remaining.log` | `archive_expiry/` |
-| Sector ETFs (LaCie) | `logs/sector_etfs.log` | `sector_etfs/` |
-| VIX + vol complex (LaCie) | `logs/vix_internals.log` | `vix_internals/` |
-| Market internals | `logs/market_internals.log` | `market_internals/` |
+| **Parallel eod-bulk 2019→2026-07-10** | `logs/eod_bulk_parallel.log` | `archive_expiry/eod_bulk/` |
+| Deep core history (queued after eod) | `logs/deep_history_2019.log` | `deep_history_2019/` |
+| Max remaining bulk/FX/crypto/dirs | `logs/archive_max_remaining.log` | `archive_expiry/` (done) |
+| Sector / VIX / internals (queued) | respective logs | LaCie paths |
 
-Scripts: `scripts/fmp_eod_bulk_parallel.py`, `scripts/fmp_archive_max_remaining.py`,  
-`scripts/fmp_eod_snapshot_20260710.py`, etc.
+Env: `FMP_EOD_START=2019-01-01` `FMP_EOD_END=2026-07-10` `FMP_EOD_WORKERS=3` `FMP_EOD_RPS=2.5`
+
+Scripts: `scripts/fmp_eod_bulk_parallel.py`, `scripts/fmp_core_deep_history.py`,  
+`scripts/fmp_archive_max_remaining.py`, `scripts/fmp_eod_snapshot_20260710.py`, etc.
 
 ## Honest gaps
 
