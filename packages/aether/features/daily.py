@@ -74,6 +74,18 @@ def _per_symbol_features(g: pd.DataFrame) -> pd.DataFrame:
         + (g["sma_50"] > g["sma_200"]).astype("float64")
     )
 
+    # Extra as-of-safe density for scorers (still past-only)
+    g["ret_10d"] = px.pct_change(10)
+    g["mom_60d"] = px.pct_change(60)
+    g["vol_of_vol_20"] = g["rvol_20"].pct_change(5)
+    # distance from 20d high/low (no future)
+    g["dist_from_20d_high"] = px / roll_high - 1.0
+    g["dist_from_20d_low"] = px / roll_low - 1.0
+    # volume trend
+    g["vol_trend_5_20"] = g["vol_sma_20"].replace(0, np.nan)
+    vol5 = vol.rolling(5, min_periods=5).mean()
+    g["vol_trend_5_20"] = vol5 / g["vol_sma_20"].replace(0, np.nan) - 1.0
+
     return g
 
 

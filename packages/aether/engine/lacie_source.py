@@ -33,15 +33,16 @@ class LacieEodBulkSource(MarketDataSource):
         return list(self._calendar)
 
     def _ensure_panel(self, start: date | None, end: date | None) -> pd.DataFrame:
-        # cache full panel once for core size
-        if self._panel is None:
-            self._panel = load_core_panel_from_eod_bulk(self._symbols)
-        df = self._panel
-        if start is not None:
-            df = df[df["date"] >= pd.Timestamp(start)]
-        if end is not None:
-            df = df[df["date"] <= pd.Timestamp(end)]
-        return df
+        # Load with start/end so parquet cache keys on the research window
+        # (stable while early eod_bulk history is still filling). Full history
+        # still available when start/end are None.
+        key = (start, end)
+        if self._panel is None or getattr(self, "_panel_key", None) != key:
+            self._panel = load_core_panel_from_eod_bulk(
+                self._symbols, start=start, end=end
+            )
+            self._panel_key = key
+        return self._panel
 
     def history(
         self,

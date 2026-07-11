@@ -67,6 +67,63 @@ class MarketDataSource(ABC):
         out["date"] = pd.to_datetime(out["date"]).dt.normalize()
         return out.sort_values(["symbol", "date"]).reset_index(drop=True)
 
+
+class PanelFrameSource(MarketDataSource):
+    """In-memory panel wrapper — reuse one eod_bulk load across research grids."""
+
+    def __init__(self, panel: pd.DataFrame, *, name: str = "PanelFrameSource") -> None:
+        if panel is None or panel.empty:
+            raise ValueError("PanelFrameSource requires non-empty panel")
+        need = {"symbol", "date", "open", "high", "low", "close", "volume"}
+        missing = need - set(panel.columns)
+        if missing:
+            raise ValueError(f"panel missing columns {sorted(missing)}")
+        self._name = name
+        self._panel = panel.copy()
+        self._panel["date"] = pd.to_datetime(self._panel["date"]).dt.normalize()
+        if "adj_close" not in self._panel.columns:
+            self._panel["adj_close"] = self._panel["close"]
+        self._symbols = sorted(self._panel["symbol"].astype(str).unique().tolist())
+        self._calendar = sorted(
+            {pd.Timestamp(d).date() for d in self._panel["date"].unique()}
+        )
+
+    def symbols(self) -> list[str]:
+        return list(self._symbols)
+
+    def calendar(self) -> list[date]:
+        return list(self._calendar)
+
+    def history(
+        self,
+        symbol: str,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> pd.DataFrame:
+        df = self._panel[self._panel["symbol"] == symbol]
+        if start is not None:
+            df = df[df["date"] >= pd.Timestamp(start)]
+        if end is not None:
+            df = df[df["date"] <= pd.Timestamp(end)]
+        return df[
+            ["date", "open", "high", "low", "close", "adj_close", "volume"]
+        ].reset_index(drop=True)
+
+    def panel(
+        self,
+        symbols: Sequence[str] | None = None,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> pd.DataFrame:
+        df = self._panel
+        if symbols is not None:
+            df = df[df["symbol"].isin(list(symbols))]
+        if start is not None:
+            df = df[df["date"] >= pd.Timestamp(start)]
+        if end is not None:
+            df = df[df["date"] <= pd.Timestamp(end)]
+        return df.reset_index(drop=True)
+
     def bars_on(self, symbol: str, d: date) -> Bar | None:
         h = self.history(symbol, start=d, end=d)
         if h.empty:

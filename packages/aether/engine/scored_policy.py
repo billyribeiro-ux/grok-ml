@@ -85,6 +85,10 @@ class ScoredPolicy(BaselinePolicy):
                 meta={"p_up": p, "uncertainty": state.uncertainty},
             )
 
+        # size: confidence × (1 − regime uncertainty). Trend-damp A/B (0.15–0.35)
+        # cut OOS return more than risk — left off until better regime sizing exists.
+        te = float(getattr(state, "trend_energy", 0.0) or 0.0)
+
         return Signal(
             symbol=sym,
             side=side,
@@ -97,5 +101,10 @@ class ScoredPolicy(BaselinePolicy):
             time_stop_bars=5 if mode == Mode.FARMER else 10,
             size_fraction=float(np.clip(conf * (1.0 - state.uncertainty), 0.15, 1.0)),
             reason=reason,
-            meta={"p_up": p, "uncertainty": state.uncertainty, "vol_regime": state.vol_regime},
+            meta={
+                "p_up": p,
+                "uncertainty": state.uncertainty,
+                "vol_regime": state.vol_regime,
+                "trend_energy": te,
+            },
         )
