@@ -2,11 +2,12 @@
 ## First-principles design for a market intelligence organism  
 ### (What “infinity times better” actually means)
 
-**Status:** Canonical internal design memory — supersedes the v1 sketch  
+**Status:** Canonical **organism / product architecture** — supersedes the v1 sketch  
 **Date:** 2026-07-11  
+**Apex math/physics bound:** see **[`AETHER_ENGINE_THEORETICAL_CEILING.md`](./AETHER_ENGINE_THEORETICAL_CEILING.md)**  
 **Audience:** Future us (Billy + Grok). Agents keep archiving data; this is the *brain*, not the warehouse.  
 **Tone:** Elon-mode = first principles + impossible goals + ruthless deletion of mediocrity.  
-**Honesty clause:** No system predicts the market with certainty. Infinity× better means infinity× better *engineering of edge, truth, and survival* — the same way Falcon is “impossible” until the cost-per-kg curve bends.
+**Honesty clause:** No system predicts the market with certainty. Infinity× better means infinity× better *engineering of edge, truth, and survival* — the same way Falcon is “impossible” until the cost-per-kg curve bends. The **ceiling doc** defines when “nothing left to improve” is scientifically true (bounds saturated; only new sensors unlock more).
 
 ---
 
