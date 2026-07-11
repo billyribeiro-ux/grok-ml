@@ -2,9 +2,10 @@
 ## Maximizing physics · science · engineering · mathematics · algebra · quant  
 ### Until there is no free theoretical lunch left *inside the laws of information and risk*
 
-**Status:** Apex design memory (above V∞ implementation roadmap)  
+**Status:** Apex **math/physics** design (under Mars-grade civilization vision)  
 **Date:** 2026-07-11  
 **Relationship:**  
+- `AETHER_MARS_GRADE_VISION.md` = multiplanetary / closed-loop civilization mandate  
 - `AETHER_ENGINE_V_INFINITY.md` = organism architecture & product laws  
 - **This document** = the **mathematical / scientific ceiling** that architecture must asymptotically approach  
 
