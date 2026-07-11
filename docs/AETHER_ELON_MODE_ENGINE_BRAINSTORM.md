@@ -1,6 +1,10 @@
-# Aether — Elon-mode first-principles engine brainstorm
+# Aether — Elon-mode first-principles engine brainstorm (v1 sketch)
 
-**Status:** Internal design memory (not a build order yet)  
+> **SUPERSEDED.** The canonical design is now:  
+> **[`AETHER_ENGINE_V_INFINITY.md`](./AETHER_ENGINE_V_INFINITY.md)**  
+> Keep this file only as the first draft. Do not implement from v1.
+
+**Status:** Archived sketch  
 **Date:** 2026-07-11  
 **Context:** Human trusts this direction; data archive runs in parallel (FMP/LaCie, Databento cart, Kimi sessions).  
 **Non-negotiable honesty:** Markets do not allow *certainty*. “100% accurate” is redefined below as *100% honest physics* — calibrated probabilities, no fake edge, no silent failures, perfect *accounting* of uncertainty. That is how rockets and autonomy actually win: not by claiming zero error, but by bounding error and surviving it.
