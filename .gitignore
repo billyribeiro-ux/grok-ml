@@ -29,3 +29,6 @@ build/
 .DS_Store
 node_modules/
 *.log
+.aether/
+apps/cockpit/.svelte-kit/
+apps/cockpit/build/

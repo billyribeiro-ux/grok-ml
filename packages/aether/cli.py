@@ -102,30 +102,69 @@ def cmd_f1_features(argv: list[str] | None = None) -> None:
 
 
 def cmd_engine_flight(argv: list[str] | None = None) -> None:
-    """Offline engine flight on MockDailySource (no LaCie required)."""
-    parser = argparse.ArgumentParser(description="Aether offline engine flight (mock data)")
+    """Engine flight: mock by default, --lacie for real eod-bulk."""
+    parser = argparse.ArgumentParser(description="Aether engine flight")
     parser.add_argument("--symbols", default="SPY,QQQ,IWM,SQQQ,TZA,SH")
     parser.add_argument("--equity", type=float, default=100_000.0)
+    parser.add_argument("--lacie", action="store_true", help="use LaCie eod-bulk source")
+    parser.add_argument("--start", default=None)
+    parser.add_argument("--end", default=None)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--name", default="offline_flight")
     args = parser.parse_args(argv)
+
+    from datetime import date as date_cls
 
     from aether.engine.mock_data import MockDailySource
     from aether.engine.pipeline import run_offline_pipeline
 
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-    src = MockDailySource(symbols=symbols)
-    result = run_offline_pipeline(source=src, symbols=symbols, start_equity_usd=args.equity)
-    stats = result.backtest.stats
-    if args.json:
-        print(json.dumps(stats, indent=2))
+    start = date_cls.fromisoformat(args.start) if args.start else None
+    end = date_cls.fromisoformat(args.end) if args.end else None
+
+    if args.lacie:
+        from aether.engine.lacie_source import LacieEodBulkSource
+
+        src = LacieEodBulkSource(symbols=symbols)
+        source_name = "LacieEodBulkSource"
+        offline_tel = False
+        name = args.name if args.name != "offline_flight" else "lacie_flight"
     else:
-        print("Aether offline engine flight (MOCK data)")
+        src = MockDailySource(symbols=symbols)
+        source_name = "MockDailySource"
+        offline_tel = True
+        name = args.name
+
+    result = run_offline_pipeline(
+        source=src,
+        symbols=symbols,
+        start=start,
+        end=end,
+        start_equity_usd=args.equity,
+        offline_telemetry=offline_tel,
+        flight_name=name,
+    )
+    stats = {
+        **result.backtest.stats,
+        "calibration_brier": result.calibration.get("brier"),
+        "train_rows": result.train_rows,
+        "test_rows": result.test_rows,
+        "telemetry": str(result.telemetry_path) if result.telemetry_path else None,
+        "source": source_name,
+    }
+    if args.json:
+        print(json.dumps(stats, indent=2, default=str))
+    else:
+        print(f"Aether engine flight ({source_name})")
         print(f"  symbols: {symbols}")
-        print(f"  feature rows: {len(result.features)}")
-        print(f"  label rows: {len(result.labels)}")
-        for k, v in stats.items():
+        print(f"  feature rows: {len(result.features)}  train={result.train_rows} test={result.test_rows}")
+        print(f"  calibration Brier (test): {result.calibration.get('brier')}")
+        for k, v in result.backtest.stats.items():
             print(f"  {k}: {v}")
-        print("  note: mock paths — not live edge. Engine plumbing verified.")
+        if result.telemetry_path:
+            print(f"  telemetry: {result.telemetry_path}")
+        if source_name.startswith("Mock"):
+            print("  note: MOCK data — plumbing + scorer only, not live edge.")
     sys.exit(0)
 
 
@@ -140,7 +179,9 @@ def main() -> None:
         cmd_integrity(rest)
     elif cmd in ("f1", "f1-features"):
         cmd_f1_features(rest)
-    elif cmd in ("engine-flight", "flight", "engine"):
+    elif cmd in ("engine-flight", "flight", "engine", "lacie-flight"):
+        if cmd == "lacie-flight" and "--lacie" not in rest:
+            rest = ["--lacie", *rest]
         cmd_engine_flight(rest)
     else:
         print(f"unknown command: {cmd}")

@@ -37,13 +37,22 @@ pytest -q
 
 # offline engine flight (mock data — no LaCie, no downloads)
 python -m aether.cli engine-flight
+
+# real LaCie eod-bulk flight (requires mount)
+python -m aether.cli lacie-flight --symbols SPY,QQQ,IWM,SQQQ,SH --start 2020-01-01 --end 2026-07-10
+
+# cockpit (telemetry UI)
+cd apps/cockpit && npm install && npm run dev
 ```
 
 ### Engine (data-pluggable)
-- `packages/aether/engine/` — types, money (cents), data protocol, mock source,
-  labels, regime state, risk governor, policy (STAND_DOWN default), execution costs,
-  paper backtest, offline pipeline
-- Swap `MockDailySource` → `LacieEodBulkSource` later without rewriting the brain
+- `packages/aether/engine/` — money (cents), data protocol, mock + LaCie sources,
+  labels, regime state, logistic scorer, scored policy, risk governor,
+  execution costs, paper backtest, walk-forward pipeline, telemetry
+- `apps/cockpit/` — Svelte 5 / SvelteKit mission control (reads latest flight JSON)
+
+### Chief-architect mode
+Build continues without waiting on download agents. Data plugs in when ready.
 
 Processed output (LaCie, not git):
 - `/Volumes/LaCie/Aether/data/processed/feature_store/`

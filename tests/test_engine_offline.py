@@ -53,11 +53,19 @@ def test_risk_stand_down_on_drawdown():
 
 def test_offline_pipeline_runs():
     src = MockDailySource(symbols=["SPY", "QQQ", "SQQQ", "SH"], seed=7)
-    result = run_offline_pipeline(source=src, start_equity_usd=100_000)
+    result = run_offline_pipeline(
+        source=src,
+        start_equity_usd=100_000,
+        write_telemetry=True,
+        offline_telemetry=True,
+    )
     assert len(result.features) > 0
     assert "ret_1d" in result.features.columns
     assert "fwd_ret_5d" in result.labels.columns
     assert result.backtest.final_equity_cents > 0
     assert "n_stand_down" in result.backtest.stats
-    # STAND_DOWN must appear as a valid policy outcome in any long mock history
     assert result.backtest.stats["n_signals"] > 0
+    assert result.calibration.get("brier") is not None
+    assert result.train_rows > 0 and result.test_rows > 0
+    assert result.telemetry_path is not None
+    assert result.telemetry_path.exists()
