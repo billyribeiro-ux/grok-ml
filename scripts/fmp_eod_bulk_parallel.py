@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Aether — Parallel multi-year eod-bulk archive (pre FMP Ultimate expiry 2026-07-12).
+Aether — Multi-year full-market eod-bulk archive (pre FMP Ultimate expiry 2026-07-12).
 
-Friday 2026-07-10 is the last US equity session before sub dies Sunday.
-Default history: 2019-01-01 → 2026-07-10 (regime shift / COVID / post-COVID / 2022 bear /
-AI melt-up). Override with FMP_EOD_START / FMP_EOD_END. Skip-if-exists. LaCie only.
+Default: 2019-01-01 → 2026-07-10 (regime history). Skip-if-exists. LaCie only.
+Sequential by default — eod-bulk 429s hard under concurrency.
 
 OUT: /Volumes/LaCie/Aether/data/raw/fmp/archive_expiry/eod_bulk/{YYYY-MM-DD}.csv
+
+Env:
+  FMP_EOD_START=2019-01-01
+  FMP_EOD_END=2026-07-10
+  FMP_EOD_SLEEP=1.25   seconds between successful requests
+  FMP_EOD_WORKERS=1    >1 only if rate limit is healthy
 """
 
 from __future__ import annotations
@@ -38,19 +43,15 @@ def _parse_date(s: str | None, default: date) -> date:
     return datetime.strptime(s.strip(), "%Y-%m-%d").date()
 
 
-# Prefer explicit start (2019+) over YEARS. YEARS kept for backward compat.
 END = _parse_date(os.getenv("FMP_EOD_END"), ASOF)
 if os.getenv("FMP_EOD_START"):
     START = _parse_date(os.getenv("FMP_EOD_START"), date(2019, 1, 1))
 else:
     years = int(os.getenv("FMP_EOD_YEARS", "0"))
-    if years > 0:
-        START = END - timedelta(days=365 * years + 30)
-    else:
-        START = date(2019, 1, 1)  # default: deep history through regime change
+    START = END - timedelta(days=365 * years + 30) if years > 0 else date(2019, 1, 1)
 
-WORKERS = int(os.getenv("FMP_EOD_WORKERS", "3"))
-RPS = float(os.getenv("FMP_EOD_RPS", "2.5"))  # eod-bulk is heavy; stay gentle
+WORKERS = int(os.getenv("FMP_EOD_WORKERS", "1"))
+SLEEP = float(os.getenv("FMP_EOD_SLEEP", "1.25"))
 
 OUT = Path("/Volumes/LaCie/Aether/data/raw/fmp/archive_expiry/eod_bulk")
 if not Path("/Volumes/LaCie/Aether").exists():
@@ -58,32 +59,16 @@ if not Path("/Volumes/LaCie/Aether").exists():
 OUT.mkdir(parents=True, exist_ok=True)
 
 _lock = threading.Lock()
-_tokens = RPS
-_last = time.monotonic()
 _tls = threading.local()
-stats = {"ok": 0, "skip": 0, "fail": 0, "empty": 0}
+stats = {"ok": 0, "skip": 0, "fail": 0, "empty": 0, "bytes": 0}
 
 
 def sess() -> requests.Session:
     if not hasattr(_tls, "s"):
         s = requests.Session()
-        s.headers.update({"User-Agent": "AetherEODBulkParallel/1.0"})
+        s.headers.update({"User-Agent": "AetherEODBulkDeep/2.0"})
         _tls.s = s
     return _tls.s
-
-
-def rate_wait() -> None:
-    global _tokens, _last
-    with _lock:
-        t = time.monotonic()
-        elapsed = t - _last
-        _last = t
-        _tokens = min(RPS, _tokens + elapsed * RPS)
-        if _tokens < 1:
-            time.sleep((1 - _tokens) / RPS)
-            _tokens = 0
-        else:
-            _tokens -= 1
 
 
 def pull_day(d: date) -> str:
@@ -92,8 +77,10 @@ def pull_day(d: date) -> str:
         with _lock:
             stats["skip"] += 1
         return "skip"
-    for attempt in range(10):
-        rate_wait()
+
+    attempt = 0
+    while attempt < 40:  # patient — do not abandon days
+        attempt += 1
         try:
             r = sess().get(
                 f"{BASE}/eod-bulk",
@@ -101,9 +88,12 @@ def pull_day(d: date) -> str:
                 timeout=300,
             )
             if r.status_code == 429:
-                wait = min(180, 3 * (2 ** min(attempt, 6)))
-                print(f"  429 {d} wait {wait}s", flush=True)
+                wait = min(300, 5 * (2 ** min(attempt - 1, 6)))
+                print(f"  429 {d} attempt={attempt} wait {wait}s", flush=True)
                 time.sleep(wait)
+                continue
+            if r.status_code >= 500:
+                time.sleep(min(60, 2 + attempt))
                 continue
             if r.status_code == 200 and len(r.content) > 1000:
                 tmp = path.with_suffix(".csv.partial")
@@ -111,74 +101,92 @@ def pull_day(d: date) -> str:
                 tmp.replace(path)
                 with _lock:
                     stats["ok"] += 1
+                    stats["bytes"] += len(r.content)
                     n = stats["ok"]
-                if n % 25 == 0:
+                print(
+                    f"  OK {d} ({len(r.content)/1e6:.2f} MB) "
+                    f"ok={stats['ok']} skip={stats['skip']} fail={stats['fail']}",
+                    flush=True,
+                )
+                if n % 50 == 0:
                     print(
-                        f"  progress ok={stats['ok']} skip={stats['skip']} "
-                        f"fail={stats['fail']} empty={stats['empty']} last={d}",
+                        f"  --- checkpoint ok={stats['ok']} "
+                        f"mb={stats['bytes']/1e6:.0f} last={d} ---",
                         flush=True,
                     )
+                time.sleep(SLEEP)
                 return "ok"
             if r.status_code == 200:
-                # holiday / empty
                 with _lock:
                     stats["empty"] += 1
+                print(f"  empty/holiday {d} len={len(r.content)}", flush=True)
+                time.sleep(SLEEP * 0.5)
                 return "empty"
+            print(f"  FAIL {d} status={r.status_code} len={len(r.content)}", flush=True)
             with _lock:
                 stats["fail"] += 1
-            print(f"  FAIL {d} status={r.status_code} len={len(r.content)}", flush=True)
+            time.sleep(SLEEP)
             return "fail"
         except Exception as e:
-            time.sleep(1 + attempt)
-            if attempt == 9:
-                with _lock:
-                    stats["fail"] += 1
-                print(f"  FAIL {d} {e}", flush=True)
-                return "fail"
+            print(f"  err {d}: {e}", flush=True)
+            time.sleep(min(60, 2 + attempt))
+
     with _lock:
         stats["fail"] += 1
+    print(f"  GIVE UP {d} after {attempt} attempts", flush=True)
     return "fail"
 
 
 def main() -> int:
     if START > END:
         raise SystemExit(f"START {START} > END {END}")
+
     days: list[date] = []
     d = START
     while d <= END:
         if d.weekday() < 5:
             days.append(d)
         d += timedelta(days=1)
-    # newest first — lock Friday + recent history before deep history
+    # newest first
     days.sort(reverse=True)
-    print("=" * 70, flush=True)
-    print("PARALLEL EOD-BULK PRE-EXPIRY ARCHIVE (deep history)", flush=True)
-    print(f"  range {START} → {END}  weekdays={len(days)}", flush=True)
-    print(f"  OUT={OUT}  workers={WORKERS} rps={RPS}", flush=True)
+
     present = sum(
         1
         for x in days
         if (OUT / f"{x.isoformat()}.csv").exists()
         and (OUT / f"{x.isoformat()}.csv").stat().st_size > 1000
     )
-    print(f"  already present: {present}  remaining≈{len(days) - present}", flush=True)
+    todo = [x for x in days if not ((OUT / f"{x.isoformat()}.csv").exists() and (OUT / f"{x.isoformat()}.csv").stat().st_size > 1000)]
+
+    print("=" * 70, flush=True)
+    print("EOD-BULK DEEP HISTORY ARCHIVE", flush=True)
+    print(f"  range {START} → {END}  weekdays={len(days)}", flush=True)
+    print(f"  present={present}  todo={len(todo)}", flush=True)
+    print(f"  OUT={OUT}  workers={WORKERS} sleep={SLEEP}s", flush=True)
     print("=" * 70, flush=True)
 
     t0 = time.time()
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = [ex.submit(pull_day, day) for day in days]
-        for _ in as_completed(futs):
-            pass
+    if WORKERS <= 1:
+        for day in todo:
+            pull_day(day)
+    else:
+        with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+            futs = [ex.submit(pull_day, day) for day in todo]
+            for _ in as_completed(futs):
+                pass
+
     elapsed = time.time() - t0
+    files = [p for p in OUT.glob("*.csv") if not p.name.startswith("._")]
     print(
         f"\nDONE ok={stats['ok']} skip={stats['skip']} empty={stats['empty']} "
         f"fail={stats['fail']} elapsed={elapsed/60:.1f}m",
         flush=True,
     )
-    present = list(OUT.glob("*.csv"))
-    present = [p for p in present if not p.name.startswith("._")]
-    print(f"files on disk: {len(present)}  size_mb={sum(p.stat().st_size for p in present)/1e6:.0f}", flush=True)
-    return 0 if stats["fail"] < 50 else 1
+    print(
+        f"files on disk: {len(files)}  size_mb={sum(p.stat().st_size for p in files)/1e6:.0f}",
+        flush=True,
+    )
+    return 0 if stats["fail"] < 100 else 1
 
 
 if __name__ == "__main__":
