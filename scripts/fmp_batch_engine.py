@@ -55,7 +55,7 @@ ETFS = [
 INDICES = ["^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^VIX1D", "^VVIX", "^TNX", "^MOVE", "^VXN", "^RVX"]
 MACRO = [
     "ESUSD", "NQUSD", "YMUSD", "RTYUSD", "CLUSD", "BZUSD", "NGUSD",
-    "GCUSD", "SIUSD", "HGUSD", "DXUSD", "ZBUSD", "ZNUSD", "EURUSD", "GBPUSD", "USDJPY",
+    "GCUSD", "SIUSD", "HGUSD", "DXUSD", "ZBUSD", "ZNUSD",  # no forex/crypto
 ]
 ALL_PRICE = list(dict.fromkeys(STOCKS + ETFS + INDICES + MACRO))
 
@@ -157,7 +157,7 @@ def job_batch_snapshots() -> None:
         ("batch_quote_core", "batch-quote", {"symbols": ",".join(STOCKS + ETFS[:20])}),
         ("batch_index_quotes", "batch-index-quotes", {}),
         ("batch_commodity_quotes", "batch-commodity-quotes", {}),
-        ("batch_forex_quotes", "batch-forex-quotes", {}),
+        # batch_forex_quotes skipped (user: no forex/crypto)
         ("batch_etf_quotes", "batch-etf-quotes", {}),
         ("batch_exchange_nasdaq", "batch-exchange-quote", {"exchange": "NASDAQ"}),
         ("batch_exchange_nyse", "batch-exchange-quote", {"exchange": "NYSE"}),

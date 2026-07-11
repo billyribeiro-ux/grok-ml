@@ -55,10 +55,8 @@ COMMODITIES = [
     "GCUSD", "SIUSD", "HGUSD", "DXUSD", "ZBUSD", "ZNUSD", "ZFUSD", "ZTUSD",
     "PLUSD", "PAUSD", "HOUSD", "RBUSD",
 ]
-FOREX = [
-    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
-    "EURJPY", "GBPJPY", "EURGBP",
-]
+# FOREX intentionally empty — user: ignore forex/crypto
+FOREX: list[str] = []
 COT_SYMBOLS = ["VX", "ES", "NQ", "YM", "CL", "GC", "SI", "ZN", "ZB"]
 
 ECON = [
@@ -201,7 +199,7 @@ def section_reference() -> None:
         ("stock_list", "stock-list", {}),
         ("etf_list", "etf-list", {}),
         ("index_list", "index-list", {}),
-        ("forex_list", "forex-list", {}),
+        # forex_list skipped (user: no forex/crypto)
         ("commodities_list", "commodities-list", {}),
         ("available_exchanges", "available-exchanges", {}),
         ("symbol_change", "symbol-change", {}),
@@ -246,7 +244,7 @@ def section_macro_prices() -> None:
         n = download_eod(sym, eod_dir)
         print(f"  EOD {sym}: {n}", flush=True)
         # 5min for highest value only
-        if sym in {"ESUSD", "NQUSD", "CLUSD", "GCUSD", "DXUSD", "EURUSD", "USDJPY", "^VIX", "^GSPC", "^TNX"}:
+        if sym in {"ESUSD", "NQUSD", "CLUSD", "GCUSD", "DXUSD", "^VIX", "^GSPC", "^TNX"}:
             n5 = download_intraday_5m(sym, m5_dir, years=2)
             print(f"  5m {sym}: {n5}", flush=True)
 
@@ -271,8 +269,7 @@ def section_news_bulk() -> None:
         ok = pull_save(f"fmp_p{page}", "fmp-articles", {"page": page, "limit": 100}, d / f"fmp_articles_p{page}.json")
         if not ok:
             break
-    for page in range(0, 20):
-        pull_save(f"forex_news_p{page}", "news/forex", {"page": page, "limit": 100}, d / f"forex_p{page}.json")
+    # forex/crypto news skipped
     # per-symbol stock news + press
     for sym in STOCKS + ETFS_CORE:
         pull_save(f"news_{sym}", "news/stock", {"symbols": sym, "limit": 1000}, d / "by_symbol" / f"{sym}_news.json")

@@ -127,8 +127,7 @@ def section_directory() -> None:
         ("delisted_p0", "delisted-companies", {"page": 0}),
         ("index_list", "index-list", {}),
         ("commodities_list", "commodities-list", {}),
-        ("forex_list", "forex-list", {}),
-        ("cryptocurrency_list", "cryptocurrency-list", {}),
+        # forex + crypto intentionally skipped (user preference)
         ("sic_list", "standard-industrial-classification-list", {}),
         ("earnings_transcript_symbols", "earnings-transcript-list", {"symbol": "AAPL"}),  # sample; full per-symbol elsewhere
     ]:
@@ -202,8 +201,7 @@ def section_quotes_batches() -> None:
         ("batch_index", "batch-index-quotes", {}),
         ("batch_etf", "batch-etf-quotes", {}),
         ("batch_commodity", "batch-commodity-quotes", {}),
-        ("batch_forex", "batch-forex-quotes", {}),
-        ("batch_crypto", "batch-crypto-quotes", {}),
+        # batch_forex / batch_crypto skipped
         ("batch_nasdaq", "batch-exchange-quote", {"exchange": "NASDAQ"}),
         ("batch_nyse", "batch-exchange-quote", {"exchange": "NYSE"}),
         ("batch_amex", "batch-exchange-quote", {"exchange": "AMEX"}),
@@ -362,10 +360,9 @@ def section_tech_full() -> None:
 
 
 def section_macro_assets() -> None:
-    print("\n[CRYPTO / FOREX / COMMODITY / INDEX PRICES]", flush=True)
-    # lists already in directory; pull EOD for majors
+    print("\n[COMMODITY / INDEX PRICES — no forex/crypto]", flush=True)
+    # Equities/index/commodity only (forex + crypto skipped per user)
     assets = [
-        "BTCUSD", "ETHUSD", "SOLUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD",
         "GCUSD", "SIUSD", "CLUSD", "NGUSD", "ESUSD", "NQUSD", "DXUSD",
         "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^TNX",
     ]
@@ -411,9 +408,7 @@ def section_news() -> None:
     for page in range(0, 20):
         if not pull(f"fmp_{page}", "fmp-articles", {"page": page, "limit": 100}, f"news/fmp/p{page:02d}.json"):
             break
-    for page in range(0, 15):
-        pull(f"crypto_news_{page}", "news/crypto", {"page": page, "limit": 100}, f"news/crypto/p{page:02d}.json")
-        pull(f"forex_news_{page}", "news/forex", {"page": page, "limit": 100}, f"news/forex/p{page:02d}.json")
+    # crypto/forex news skipped
     for sym in CORE:
         pull(f"stock_news_{sym}", "news/stock", {"symbols": sym, "limit": 1000}, f"news/stock/{sym}.json")
         pull(f"press_{sym}", "news/press-releases", {"symbols": sym, "limit": 500}, f"news/press/{sym}.json")

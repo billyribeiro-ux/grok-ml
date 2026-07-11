@@ -31,6 +31,10 @@ Download status is tracked by `scripts/fmp_download_plan_catalog.py` into
 ## Already partially covered by earlier pipelines
 - Core OHLCV universe, VIX, sectors, IWM holdings, ultimate enrichment, batches, market_internals
 
+## User exclusions (do not download)
+- **Forex** (lists, quotes, charts, news)
+- **Crypto** (lists, quotes, charts, news)
+
 ## Honest gaps on stable API (404 / empty when probed)
 - Some alias paths differ from marketing names (`stock-screener` vs `company-screener`)
 - A few bulk endpoints require specific params or return empty

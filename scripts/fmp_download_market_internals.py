@@ -305,7 +305,7 @@ def section_market_wide_flow() -> None:
         ("batch_index_quotes", "batch-index-quotes", {}),
         ("batch_etf_quotes", "batch-etf-quotes", {}),
         ("batch_commodity_quotes", "batch-commodity-quotes", {}),
-        ("batch_forex_quotes", "batch-forex-quotes", {}),
+        # batch_forex_quotes skipped (user: no forex/crypto)
         ("batch_exchange_nasdaq", "batch-exchange-quote", {"exchange": "NASDAQ"}),
         ("batch_exchange_nyse", "batch-exchange-quote", {"exchange": "NYSE"}),
         ("batch_exchange_amex", "batch-exchange-quote", {"exchange": "AMEX"}),
