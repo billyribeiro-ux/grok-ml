@@ -127,7 +127,8 @@ def section_directory() -> None:
         ("delisted_p0", "delisted-companies", {"page": 0}),
         ("index_list", "index-list", {}),
         ("commodities_list", "commodities-list", {}),
-        # forex + crypto intentionally skipped (user preference)
+        ("forex_list", "forex-list", {}),
+        ("cryptocurrency_list", "cryptocurrency-list", {}),
         ("sic_list", "standard-industrial-classification-list", {}),
         ("earnings_transcript_symbols", "earnings-transcript-list", {"symbol": "AAPL"}),  # sample; full per-symbol elsewhere
     ]:
@@ -201,7 +202,8 @@ def section_quotes_batches() -> None:
         ("batch_index", "batch-index-quotes", {}),
         ("batch_etf", "batch-etf-quotes", {}),
         ("batch_commodity", "batch-commodity-quotes", {}),
-        # batch_forex / batch_crypto skipped
+        ("batch_forex", "batch-forex-quotes", {}),
+        ("batch_crypto", "batch-crypto-quotes", {}),
         ("batch_nasdaq", "batch-exchange-quote", {"exchange": "NASDAQ"}),
         ("batch_nyse", "batch-exchange-quote", {"exchange": "NYSE"}),
         ("batch_amex", "batch-exchange-quote", {"exchange": "AMEX"}),
@@ -360,11 +362,13 @@ def section_tech_full() -> None:
 
 
 def section_macro_assets() -> None:
-    print("\n[COMMODITY / INDEX PRICES — no forex/crypto]", flush=True)
-    # Equities/index/commodity only (forex + crypto skipped per user)
+    print("\n[COMMODITY / INDEX / FOREX / CRYPTO PRICES — archive all]", flush=True)
+    # Archive everything under Ultimate (use later only if desired)
     assets = [
         "GCUSD", "SIUSD", "CLUSD", "NGUSD", "ESUSD", "NQUSD", "DXUSD",
         "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX", "^TNX",
+        "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+        "BTCUSD", "ETHUSD", "SOLUSD", "BNBUSD", "XRPUSD", "ADAUSD", "DOGEUSD",
     ]
     for sym in assets:
         pull(
@@ -408,7 +412,9 @@ def section_news() -> None:
     for page in range(0, 20):
         if not pull(f"fmp_{page}", "fmp-articles", {"page": page, "limit": 100}, f"news/fmp/p{page:02d}.json"):
             break
-    # crypto/forex news skipped
+    for page in range(0, 15):
+        pull(f"crypto_news_{page}", "news/crypto", {"page": page, "limit": 100}, f"news/crypto/p{page:02d}.json")
+        pull(f"forex_news_{page}", "news/forex", {"page": page, "limit": 100}, f"news/forex/p{page:02d}.json")
     for sym in CORE:
         pull(f"stock_news_{sym}", "news/stock", {"symbols": sym, "limit": 1000}, f"news/stock/{sym}.json")
         pull(f"press_{sym}", "news/press-releases", {"symbols": sym, "limit": 500}, f"news/press/{sym}.json")
