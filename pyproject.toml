@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aether"
+version = "0.1.0"
+description = "Aether market intelligence engine — F0/F1 data + feature spine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.0",
+  "pyarrow>=14.0",
+  "numpy>=1.26",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+aether-integrity = "aether.cli:cmd_integrity"
+aether-f1-features = "aether.cli:cmd_f1_features"
+
+[tool.setuptools.packages.find]
+where = ["packages"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["packages"]

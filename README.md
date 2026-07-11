@@ -3,17 +3,42 @@
 Market Intelligence Brain — day-trading tops/bottoms decoder (ML + self-learning design).
 
 ## Repo contents
+- `packages/aether/` — **engine spine (F0/F1)**: paths, integrity, loaders, daily features, feature store
 - `scripts/` — FMP Ultimate + Databento download pipelines
-- `docs/` — architecture notes, dashboard prompt, data status
+- `docs/` — Mars-grade vision, theoretical ceiling, V∞ architecture
 - Data lives on external LaCie: `/Volumes/LaCie/Aether/` (not in git)
+
+## Design docs (read in order)
+1. `docs/AETHER_MARS_GRADE_VISION.md`
+2. `docs/AETHER_ENGINE_THEORETICAL_CEILING.md`
+3. `docs/AETHER_ENGINE_V_INFINITY.md`
 
 ## Setup
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install requests pandas pyarrow python-dotenv tqdm databento
+pip install -e ".[dev]"
+pip install requests tqdm databento   # download scripts
 cp .env.example .env   # add API keys
 ```
+
+## F0 / F1 (engine spine)
+Requires LaCie mounted at `/Volumes/LaCie/Aether`.
+
+```bash
+# F0 — integrity inventory → LaCie data/processed/integrity/
+python -m aether.cli integrity
+
+# F1 — daily features for core symbols from eod-bulk → feature store
+python -m aether.cli f1 --start 2019-01-01 --end 2026-07-10
+
+# unit tests (no LaCie required)
+pytest -q
+```
+
+Processed output (LaCie, not git):
+- `/Volumes/LaCie/Aether/data/processed/feature_store/`
+- `/Volumes/LaCie/Aether/data/processed/integrity/`
 
 ## Remote
 https://github.com/billyribeiro-ux/grok-ml.git

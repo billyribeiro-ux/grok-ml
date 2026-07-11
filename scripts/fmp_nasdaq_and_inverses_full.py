@@ -25,7 +25,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -44,9 +44,11 @@ ASOF = date(2026, 7, 10)
 START = os.getenv("FMP_NASDAQ_START", "2015-01-01")
 END = ASOF.isoformat()
 START_5M = os.getenv("FMP_NASDAQ_5M_FROM", "2024-07-10")  # 2y would be huge; default ~1y
+START_1M = os.getenv("FMP_NASDAQ_1M_FROM", (ASOF - timedelta(days=90)).isoformat())  # 90d default
 SLEEP = float(os.getenv("FMP_NASDAQ_SLEEP", "0.65"))
 SCREENER_MAX = int(os.getenv("FMP_NASDAQ_SCREENER_MAX", "4000"))  # liquid first
 TOP_5M = int(os.getenv("FMP_NASDAQ_TOP_5M", "300"))  # liquid NASDAQ 5m
+TOP_1M = int(os.getenv("FMP_NASDAQ_TOP_1M", "100"))  # liquid NASDAQ 1m
 
 OUT_NQ = Path("/Volumes/LaCie/Aether/data/raw/fmp/nasdaq_full")
 OUT_INV = Path("/Volumes/LaCie/Aether/data/raw/fmp/inverses_full")
@@ -268,6 +270,25 @@ def phase_nasdaq_5m(rows: list[dict]) -> None:
             print(f"  progress 5m {i}/{len(top)} ok={_ok}", flush=True)
 
 
+def phase_nasdaq_1m(rows: list[dict]) -> None:
+    top = rows[:TOP_1M]
+    print(f"\n[4b] NASDAQ top-{TOP_1M} by volume → 1min from {START_1M}", flush=True)
+    for i, r in enumerate(top, 1):
+        sym = str(r.get("symbol", "")).strip()
+        if not sym:
+            continue
+        safe = sym.replace("/", "_")
+        save(
+            f"nq1m_{sym}",
+            "historical-chart/1min",
+            {"symbol": sym, "from": START_1M, "to": END},
+            OUT_NQ / "ohlcv_1min" / f"{safe}.json",
+            min_bytes=80,
+        )
+        if i % 10 == 0:
+            print(f"  progress 1m {i}/{len(top)} ok={_ok}", flush=True)
+
+
 def build_inverse_list() -> list[str]:
     print("\n[5] Build inverse ETF universe", flush=True)
     st, body = get("etf-list", {})
@@ -322,17 +343,18 @@ def main() -> int:
     print("NASDAQ FULL + INVERSE ETFs ARCHIVE", flush=True)
     print(f"OUT_NQ={OUT_NQ}", flush=True)
     print(f"OUT_INV={OUT_INV}", flush=True)
-    print(f"EOD {START}→{END}  sleep={SLEEP}s screener_max={SCREENER_MAX} top5m={TOP_5M}", flush=True)
+    print(f"EOD {START}→{END}  sleep={SLEEP}s screener_max={SCREENER_MAX} top5m={TOP_5M} top1m={TOP_1M}", flush=True)
     print("=" * 70, flush=True)
     (OUT_NQ / "run_start.json").write_text(json.dumps({"started": now(), "as_of": END}, indent=2))
     (OUT_INV / "run_start.json").write_text(json.dumps({"started": now(), "as_of": END}, indent=2))
 
     rows = phase_nasdaq_universe()
     if rows:
-        # EOD for all is the big one — do screener+5m first for faster usable value, then EOD
+        # Daily EOD is foundational — do screener, then EOD for all, then intraday 5m/1m
         phase_nasdaq_screener(rows)
-        phase_nasdaq_5m(rows)
         phase_nasdaq_eod(rows)
+        phase_nasdaq_5m(rows)
+        phase_nasdaq_1m(rows)
 
     inv = build_inverse_list()
     phase_inverses(inv)
