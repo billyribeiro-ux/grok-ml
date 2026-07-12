@@ -38,8 +38,12 @@ def main() -> int:
     nasdaq_symbols = {str(r.get("symbol", "")).strip() for r in rows if r.get("symbol")}
     print(f"NASDAQ symbols: {len(nasdaq_symbols)}")
 
-    csvs = sorted(EOD_BULK.glob("*.csv"))
-    print(f"eod_bulk files: {len(csvs)}")
+    csvs = sorted(
+        p
+        for p in EOD_BULK.glob("*.csv")
+        if not p.name.startswith("._") and p.stat().st_size > 1000
+    )
+    print(f"eod_bulk files: {len(csvs)} (AppleDouble skipped)")
 
     # Pre-build output paths so we can check skip
     sym_to_path = {sym: OUT / f"{sym.replace('/', '_')}.json" for sym in nasdaq_symbols}

@@ -64,8 +64,9 @@
 		{ href: '/signals', label: 'SIGNALS', k: '2' },
 		{ href: '/history', label: 'HISTORY', k: '3' },
 		{ href: '/research', label: 'RESEARCH', k: '4' },
-		{ href: '/data', label: 'DATA', k: '5' },
-		{ href: '/settings', label: 'SETTINGS', k: '6' }
+		{ href: '/earnings', label: 'EARNINGS', k: '5' },
+		{ href: '/data', label: 'DATA', k: '6' },
+		{ href: '/settings', label: 'SETTINGS', k: '7' }
 	];
 
 	onMount(() => {

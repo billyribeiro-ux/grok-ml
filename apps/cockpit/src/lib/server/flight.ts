@@ -61,6 +61,33 @@ export function loadResearchIndex(): Record<string, unknown> | null {
 	return tryReadJsonFile('/Volumes/LaCie/Aether/data/processed/research/index.json');
 }
 
+const EARNINGS_RESEARCH = '/Volumes/LaCie/Aether/data/processed/research/earnings_events';
+const EARNINGS_ARCHIVE = '/Volumes/LaCie/Aether/data/raw/fmp/earnings_archive';
+
+/** Honest local earnings archive + event-study summaries (no network). */
+export function loadEarningsResearch(): {
+	summaries: Record<string, Record<string, unknown>>;
+	panels: Record<string, { exists: boolean; path: string }>;
+	meta: Record<string, unknown> | null;
+} {
+	const summaries: Record<string, Record<string, unknown>> = {};
+	for (const u of ['sp500', 'iwm', 'nasdaq'] as const) {
+		const p = join(EARNINGS_RESEARCH, `${u}_summary.json`);
+		const j = tryReadJsonFile(p);
+		if (j) summaries[u] = j;
+	}
+	const panels: Record<string, { exists: boolean; path: string }> = {};
+	for (const u of ['all', 'sp500', 'iwm', 'nasdaq'] as const) {
+		const p = join(EARNINGS_ARCHIVE, 'panels', `${u}_2018_20260710.parquet`);
+		panels[u] = { exists: existsSync(p), path: p };
+	}
+	return {
+		summaries,
+		panels,
+		meta: tryReadJsonFile(join(EARNINGS_ARCHIVE, 'meta.json'))
+	};
+}
+
 export function loadFlightLeaderboard(): Record<string, unknown> | null {
 	return tryReadJsonFile(
 		'/Volumes/LaCie/Aether/data/processed/research/flight_leaderboard.json'

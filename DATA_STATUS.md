@@ -28,23 +28,24 @@ Never store paid Databento / FMP archives only on the Mac internal drive.
 
 | Layer | Range | Notes |
 |-------|-------|--------|
-| **Full-market eod-bulk** | **2019-01-01 → 2026-07-10** | ~1960 weekdays; primary scanner history |
-| Core deep history (per symbol) | 2019-01-01 → 2026-07-10 | after eod-bulk; `deep_history_2019/` |
-| Earlier packs (ultimate/IWM/etc.) | mostly ~5y (~2021+) | still useful; eod-bulk covers older marketwide |
+| **Full-market eod-bulk** | **2018-01-01 → 2026-07-10** | ~2225 weekdays in pin; primary scanner history |
+| Core deep history (per symbol) | 2018-01-01 → 2026-07-10 | after eod-bulk; `deep_history_2019/` (legacy dir name) |
+| Earlier packs (ultimate/IWM/etc.) | mostly ~5y (~2021+) | still useful; eod-bulk also has pre-2018 cold stockpile |
 
-Why 2019: pre-COVID → COVID crash → recovery → 2022 bear → AI regime.  
-2020 alone is not enough for “how regimes changed.”
+**Hard research / archive pin:** **2018-01-01 → 2026-07-10** only.  
+Why: full 2018→COVID→2022 bear→AI regime without pulling pre-2018 into models.
 
 ## Running overnight / weekend (pre-expiry)
 
 | Job | Log | Output |
 |-----|-----|--------|
-| **Parallel eod-bulk 2019→2026-07-10** | `logs/eod_bulk_parallel.log` | `archive_expiry/eod_bulk/` |
+| **eod-bulk 2018→2026-07-10** | `logs/eod_bulk_parallel.log` | `archive_expiry/eod_bulk/` |
 | Deep core history (queued after eod) | `logs/deep_history_2019.log` | `deep_history_2019/` |
+| SP500/IWM/NASDAQ multi-TF | `logs/fmp_mtf_*.log` | `sp500_full/` `iwm_full/` `nasdaq_full/` |
 | Max remaining bulk/FX/crypto/dirs | `logs/archive_max_remaining.log` | `archive_expiry/` (done) |
 | Sector / VIX / internals (queued) | respective logs | LaCie paths |
 
-Env: `FMP_EOD_START=2019-01-01` `FMP_EOD_END=2026-07-10` `FMP_EOD_WORKERS=3` `FMP_EOD_RPS=2.5`
+Env: `FMP_EOD_START=2018-01-01` `FMP_EOD_END=2026-07-10` `FMP_EOD_WORKERS=3`
 
 Scripts: `scripts/fmp_eod_bulk_parallel.py`, `scripts/fmp_core_deep_history.py`,  
 `scripts/fmp_archive_max_remaining.py`, `scripts/fmp_eod_snapshot_20260710.py`, etc.

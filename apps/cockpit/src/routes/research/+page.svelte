@@ -640,7 +640,7 @@
 			<pre class="pre mono"># pinned calendar (stable cuts while eod_bulk grows)
 # research-only: --no-promote so mission latest_flight is not clobbered
 python -m aether.cli walkforward --lacie --folds 5 --universe hybrid_sector_mission \
-  --max-positions 3 --min-confidence 0.58 --start 2019-01-01 --end 2026-07-10
+  --max-positions 3 --min-confidence 0.58 --start 2018-01-01 --end 2026-07-10
 python -m aether.cli engine-flight --lacie --universe hybrid_sector_mission \
   --max-positions 3 --min-confidence 0.58 --name hybrid_c58_pos3 --no-promote
 python -m aether.cli engine-flight --lacie --max-positions 5 --name lacie_best_risk \

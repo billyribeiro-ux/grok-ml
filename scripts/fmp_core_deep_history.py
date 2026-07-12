@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Deep EOD + multi-TF history for Aether core symbols from 2019-01-01 → 2026-07-10.
+Deep EOD + multi-TF history for Aether core symbols from 2018-01-01 → 2026-07-10.
 
 Complements full-market eod-bulk (which is one row/day/symbol) with long per-symbol
 histories for longs, inverses, sectors, indices, vol complex.
 
-OUT: /Volumes/LaCie/Aether/data/raw/fmp/deep_history_2019/
+OUT: /Volumes/LaCie/Aether/data/raw/fmp/deep_history_2019/  (legacy dir name; window is 2018→2026-07-10)
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ if not API_KEY:
     raise SystemExit("FMP_API_KEY missing")
 
 BASE = "https://financialmodelingprep.com/stable"
-START = os.getenv("FMP_DEEP_START", "2019-01-01")
+START = os.getenv("FMP_DEEP_START", "2018-01-01")
 END = os.getenv("FMP_DEEP_END", "2026-07-10")
 # 1hour only needs ~3y to stay useful without huge bandwidth
 HOUR_FROM = os.getenv("FMP_DEEP_HOUR_FROM", "2023-01-01")

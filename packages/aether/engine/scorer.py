@@ -52,6 +52,16 @@ FEATURE_COLS = (
     "fund_ev_fcf",
     "fund_net_debt_ebitda",
     "fund_income_quality",
+    # Earnings proximity / last surprise (calendar archive) — only if present
+    "earn_days_to_next",
+    "earn_days_since_last",
+    "earn_in_pre_window",
+    "earn_in_post_window",
+    "earn_is_day",
+    "earn_next_is_bmo",
+    "earn_next_is_amc",
+    "earn_last_eps_surprise_pct",
+    "earn_last_rev_surprise_pct",
 )
 
 
@@ -84,6 +94,10 @@ class LogisticScorer:
         fund_cols = [c for c in cols if c.startswith("fund_")]
         if fund_cols:
             work[fund_cols] = work[fund_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        # Earnings distance can be NaN off-calendar (ETFs); neutral-fill for model
+        earn_cols = [c for c in cols if c.startswith("earn_")]
+        if earn_cols:
+            work[earn_cols] = work[earn_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
         x = work.to_numpy()
         y = df[self.label_col].astype(float).to_numpy()
         mask = np.isfinite(x).all(axis=1) & np.isfinite(y)

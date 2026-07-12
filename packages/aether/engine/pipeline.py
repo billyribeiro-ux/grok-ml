@@ -84,6 +84,14 @@ def run_offline_pipeline(
     except Exception:
         pass
 
+    # Optional earnings proximity features (LaCie calendar archive)
+    try:
+        from aether.loaders.earnings import attach_earnings_features
+
+        features = attach_earnings_features(features, universe="sp500")
+    except Exception:
+        pass
+
     labels = add_forward_labels(features)
     if label_col not in labels.columns:
         raise RuntimeError(f"label column missing: {label_col}")

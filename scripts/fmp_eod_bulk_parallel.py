@@ -2,13 +2,13 @@
 """
 Aether — Multi-year full-market eod-bulk archive (pre FMP Ultimate expiry 2026-07-12).
 
-Default: 2019-01-01 → 2026-07-10 (regime history). Skip-if-exists. LaCie only.
+Default: 2018-01-01 → 2026-07-10 (hard pin). Skip-if-exists. LaCie only.
 Sequential by default — eod-bulk 429s hard under concurrency.
 
 OUT: /Volumes/LaCie/Aether/data/raw/fmp/archive_expiry/eod_bulk/{YYYY-MM-DD}.csv
 
 Env:
-  FMP_EOD_START=2019-01-01
+  FMP_EOD_START=2018-01-01
   FMP_EOD_END=2026-07-10
   FMP_EOD_SLEEP=1.25   seconds between successful requests
   FMP_EOD_WORKERS=1    >1 only if rate limit is healthy
@@ -45,10 +45,10 @@ def _parse_date(s: str | None, default: date) -> date:
 
 END = _parse_date(os.getenv("FMP_EOD_END"), ASOF)
 if os.getenv("FMP_EOD_START"):
-    START = _parse_date(os.getenv("FMP_EOD_START"), date(2019, 1, 1))
+    START = _parse_date(os.getenv("FMP_EOD_START"), date(2018, 1, 1))
 else:
     years = int(os.getenv("FMP_EOD_YEARS", "0"))
-    START = END - timedelta(days=365 * years + 30) if years > 0 else date(2019, 1, 1)
+    START = END - timedelta(days=365 * years + 30) if years > 0 else date(2018, 1, 1)
 
 WORKERS = int(os.getenv("FMP_EOD_WORKERS", "1"))
 SLEEP = float(os.getenv("FMP_EOD_SLEEP", "1.25"))

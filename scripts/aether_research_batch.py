@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "packages"))
 def main() -> None:
     p = argparse.ArgumentParser(description="Aether research batch (promote_latest=False)")
     p.add_argument("--universe", default="hybrid_plus_mega")
-    p.add_argument("--start", default="2019-01-01")
+    p.add_argument("--start", default="2018-01-01")
     p.add_argument("--end", default="2026-07-10")
     p.add_argument("--conf", type=float, nargs="+", default=[0.55, 0.58])
     p.add_argument("--pos", type=int, nargs="+", default=[3, 5])
