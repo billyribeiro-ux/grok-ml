@@ -41,9 +41,19 @@ python -m aether.cli engine-flight
 # real LaCie eod-bulk flight (requires mount)
 python -m aether.cli lacie-flight --symbols SPY,QQQ,IWM,SQQQ,SH --start 2018-01-01 --end 2026-07-10
 
-# cockpit (telemetry UI)
-cd apps/cockpit && npm install && npm run dev
+# monorepo (pnpm) — frontend + backend together
+pnpm install
+pnpm dev:all
+# front  → http://127.0.0.1:5173  (SvelteKit cockpit)
+# back   → http://127.0.0.1:8787  (Python status/research API)
+#   curl http://127.0.0.1:8787/health
+#   curl http://127.0.0.1:8787/api/status
+
+# or separately:
+pnpm dev:front
+pnpm dev:backend
 ```
+
 
 ### Engine (data-pluggable)
 - `packages/aether/engine/` — money (cents), data protocol, mock + LaCie sources,

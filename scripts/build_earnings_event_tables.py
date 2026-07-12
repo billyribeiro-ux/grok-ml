@@ -78,7 +78,17 @@ def summarize(table: pd.DataFrame, universe: str, path: Path) -> dict:
     }
     if table.empty:
         return summary
-    for col in ("pre_ret_1d", "pre_ret_5d", "post_ret_1d", "post_ret_5d", "gap_ret"):
+    for col in (
+        "pre_ret_1d",
+        "pre_ret_5d",
+        "pre_ret_8d",
+        "pre_vol_8d",
+        "vol_spike_8",
+        "sell_news_ret",
+        "post_ret_1d",
+        "post_ret_5d",
+        "gap_ret",
+    ):
         if col in table.columns:
             s = table[col].dropna()
             summary[col] = {

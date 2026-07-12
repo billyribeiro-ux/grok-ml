@@ -1,35 +1,50 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-const ROOT = '/Volumes/LaCie/Aether/data/processed/research';
+const RESEARCH = '/Volumes/LaCie/Aether/data/processed/research';
 
-function read(name: string): unknown {
-	const p = `${ROOT}/${name}`;
-	if (!existsSync(p)) return null;
+function readJson(path: string): unknown | null {
 	try {
-		return JSON.parse(readFileSync(p, 'utf8'));
+		if (!existsSync(path)) return null;
+		return JSON.parse(readFileSync(path, 'utf8'));
 	} catch {
 		return null;
 	}
 }
 
-/** Aggregate research artifacts for tools / cockpit refresh. */
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async ({ url }) => {
+	const name = url.searchParams.get('name');
+	if (name) {
+		// safe basename only
+		const safe = name.replace(/[^a-zA-Z0-9_\-.]/g, '');
+		const path = join(RESEARCH, safe.endsWith('.json') ? safe : `${safe}.json`);
+		const data = readJson(path);
+		if (!data) return json({ error: 'not found', name: safe }, { status: 404 });
+		return json({ name: safe, data });
+	}
+
+	const files = existsSync(RESEARCH)
+		? readdirSync(RESEARCH).filter(
+				(n) => n.endsWith('.json') && !n.startsWith('._') && !n.includes('oos')
+			)
+		: [];
+
+	const specialists = files
+		.filter((n) => n.startsWith('earnings_specialist_'))
+		.map((n) => ({ name: n, data: readJson(join(RESEARCH, n)) }));
+
+	const mtf = files
+		.filter((n) => n.startsWith('mtf_research_'))
+		.map((n) => ({ name: n, data: readJson(join(RESEARCH, n)) }));
+
 	return json({
 		loadedAt: new Date().toISOString(),
-		summary: read('research_summary.json'),
-		leaderboard: read('flight_leaderboard.json'),
-		index: read('index.json'),
-		walkforward:
-			read('latest_walkforward_hybrid_conf58.json') ??
-			read('latest_walkforward_hybrid_sector_mission.json') ??
-			read('latest_walkforward.json'),
-		riskSweep:
-			read('latest_risk_sweep_hybrid_sector_mission.json') ?? read('latest_risk_sweep.json'),
-		horizon: read('latest_horizon_compare.json'),
-		calByRegime: read('latest_calibration_by_regime.json'),
-		confPositionGrid: read('latest_conf_position_grid.json'),
-		purgeTrainSensitivity: read('latest_purge_train_sensitivity.json')
+		ready: readJson(join(RESEARCH, 'ready_snapshot.json')),
+		index: readJson(join(RESEARCH, 'index.json')),
+		specialists,
+		mtfResearch: mtf,
+		fileCount: files.length
 	});
 };

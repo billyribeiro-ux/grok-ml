@@ -698,13 +698,140 @@ def cmd_archive_status(argv: list[str] | None = None) -> None:
     sys.exit(0)
 
 
+def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
+    """Train/evaluate index-constituent earnings specialists from LaCie event tables."""
+    parser = argparse.ArgumentParser(description="Aether earnings specialist (local)")
+    parser.add_argument("--universe", default="sp500", choices=["sp500", "iwm", "nasdaq"])
+    parser.add_argument(
+        "--mode",
+        default="post1d",
+        choices=["post1d", "pre8"],
+        help="post1d=after print; pre8=buy rumor T-8→T-1 sell before news",
+    )
+    parser.add_argument("--train-frac", type=float, default=0.7)
+    parser.add_argument("--min-confidence", type=float, default=0.55)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    from aether.engine.earnings_specialist import run_earnings_specialist
+
+    try:
+        r = run_earnings_specialist(
+            args.universe,
+            mode=args.mode,  # type: ignore[arg-type]
+            train_frac=args.train_frac,
+            min_confidence=args.min_confidence,
+            write=True,
+        )
+    except Exception as e:
+        print(f"earnings-specialist failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "universe": r.universe,
+                    "mode": r.mode,
+                    "strategy": r.strategy,
+                    "accuracy": r.accuracy,
+                    "brier": r.brier,
+                    "base_rate": r.base_rate,
+                    "lift": r.lift,
+                    "n_train": r.n_train,
+                    "n_test": r.n_test,
+                    "cut_date": r.cut_date,
+                    "long_mean_pnl": r.long_mean_pnl,
+                    "short_mean_pnl": r.short_mean_pnl,
+                    "mean_vol_spike_8_oos": r.mean_vol_spike_8_oos,
+                    "path": r.path,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print("Aether index earnings specialist")
+        print(f"  universe={r.universe} mode={r.mode} strategy={r.strategy}")
+        print(f"  window={r.window}")
+        print(f"  events={r.n_events} train={r.n_train} test={r.n_test} cut={r.cut_date}")
+        print(f"  accuracy={r.accuracy:.4f} base_rate={r.base_rate:.4f} lift={r.lift:.4f}")
+        print(f"  brier={r.brier:.4f}")
+        print(f"  OOS mean pnl @p>={args.min_confidence}: {r.long_mean_pnl}")
+        print(f"  OOS mean pnl @p<={1 - args.min_confidence:.2f}: {r.short_mean_pnl}")
+        if r.mean_vol_spike_8_oos is not None:
+            print(f"  OOS mean vol_spike_8: {r.mean_vol_spike_8_oos:.3f}")
+        print(f"  wrote {r.path}")
+    sys.exit(0)
+
+
+def cmd_mtf_research(argv: list[str] | None = None) -> None:
+    """SP500 multi-TF research flight from completed LaCie charts."""
+    parser = argparse.ArgumentParser(description="Aether SP500 multi-TF research (local)")
+    parser.add_argument("--interval", default="15min", choices=["1hour", "15min", "5min", "1min"])
+    parser.add_argument("--label", default="y_up_5", choices=["y_up_1", "y_up_5"])
+    parser.add_argument("--train-frac", type=float, default=0.7)
+    parser.add_argument("--min-confidence", type=float, default=0.55)
+    parser.add_argument(
+        "--symbol-limit",
+        type=int,
+        default=0,
+        help="0 = all SP500 with files; else cap for faster runs",
+    )
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    from aether.engine.mtf_research import run_sp500_mtf_research
+
+    try:
+        r = run_sp500_mtf_research(
+            interval=args.interval,
+            label=args.label,
+            train_frac=args.train_frac,
+            min_confidence=args.min_confidence,
+            symbol_limit=args.symbol_limit or None,
+            write=True,
+        )
+    except Exception as e:
+        print(f"mtf-research failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "interval": r.interval,
+                    "label": r.label,
+                    "n_symbols": r.n_symbols,
+                    "n_bars": r.n_bars,
+                    "accuracy": r.accuracy,
+                    "brier": r.brier,
+                    "base_rate": r.base_rate,
+                    "lift": r.lift,
+                    "mean_fwd_when_long": r.mean_fwd_when_long,
+                    "mean_fwd_when_short": r.mean_fwd_when_short,
+                    "path": r.path,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print("Aether SP500 multi-TF research")
+        print(f"  interval={r.interval} label={r.label} symbols={r.n_symbols} bars={r.n_bars}")
+        print(f"  train={r.n_train} test={r.n_test} cut={r.cut_date}")
+        print(f"  accuracy={r.accuracy:.4f} base={r.base_rate:.4f} lift={r.lift:.4f} brier={r.brier:.4f}")
+        print(f"  mean fwd @long conf: {r.mean_fwd_when_long}")
+        print(f"  mean fwd @short conf: {r.mean_fwd_when_short}")
+        print(f"  wrote {r.path}")
+    sys.exit(0)
+
+
 def main() -> None:
     """Unified entry: python -m aether.cli integrity|f1|engine-flight|status|walkforward|risk-sweep"""
     if len(sys.argv) < 2:
         print(
             "usage: python -m aether.cli "
             "[integrity|f1|engine-flight|status|walkforward|risk-sweep|"
-            "horizon|archive-status] …"
+            "horizon|archive-status|earnings-specialist|mtf-research] …"
         )
         sys.exit(2)
     cmd = sys.argv[1]
@@ -727,9 +854,20 @@ def main() -> None:
         cmd_horizon_compare(rest)
     elif cmd in ("archive-status", "archives", "mtf-status", "earnings-status"):
         cmd_archive_status(rest)
+    elif cmd in ("earnings-specialist", "earn-ml", "earnings-ml"):
+        cmd_earnings_specialist(rest)
+    elif cmd in ("mtf-research", "mtf", "sp500-mtf"):
+        cmd_mtf_research(rest)
+    elif cmd in ("ready", "ready-snapshot", "snapshot"):
+        import subprocess
+        from pathlib import Path as _P
+
+        script = _P(__file__).resolve().parents[2] / "scripts" / "build_research_ready_snapshot.py"
+        raise SystemExit(subprocess.call([sys.executable, str(script), *rest]))
     else:
         print(f"unknown command: {cmd}")
         sys.exit(2)
+
 
 
 if __name__ == "__main__":

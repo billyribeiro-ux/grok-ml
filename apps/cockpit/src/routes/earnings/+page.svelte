@@ -10,9 +10,15 @@
 	const flight = $derived(data.flight);
 	const summaries = $derived(data.earnings?.summaries ?? {});
 	const panels = $derived(data.earnings?.panels ?? {});
+	const specialists = $derived(data.earnings?.specialists ?? {});
+	const mtfResearch = $derived(data.earnings?.mtfResearch ?? {});
 	const mtf = $derived(data.mtf ?? {});
 	const sp = $derived((summaries.sp500 ?? null) as Record<string, unknown> | null);
 	const iwm = $derived((summaries.iwm ?? null) as Record<string, unknown> | null);
+	const spSpec = $derived(
+		(specialists.sp500_post1d ?? specialists.sp500 ?? null) as Record<string, unknown> | null
+	);
+	const spPre8 = $derived((specialists.sp500_pre8 ?? null) as Record<string, unknown> | null);
 
 	function meanOf(s: Record<string, unknown> | null, key: string): number | null {
 		if (!s) return null;
@@ -55,10 +61,12 @@
 				large
 			/>
 			<MetricTile
-				label="Miss post 1d"
-				value={fmtPct(sp?.miss_post_ret_1d_mean as number)}
-				sub={sp ? `n=${fmtInt(sp.miss_n as number)}` : '—'}
-				tone="neg"
+				label="Pre8 long OOS"
+				value={fmtPct(
+					(spPre8?.long_only_mean_pre8 ?? spPre8?.long_mean_pnl) as number
+				)}
+				sub={spPre8 ? `buy rumor T-8→T-1` : 'rebuild+pre8'}
+				tone="pos"
 				large
 			/>
 		</div>
@@ -120,6 +128,95 @@
 									<td class="r mono">{fmtPct(meanOf(row, 'post_ret_5d'))}</td>
 									<td class="r mono pos">{fmtPct(row.beat_post_ret_1d_mean as number)}</td>
 									<td class="r mono neg">{fmtPct(row.miss_post_ret_1d_mean as number)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</Panel>
+
+			<Panel title="Index earnings ML" tag="POST + PRE8 RUMOR" accent="pos">
+				<p class="note mono">
+					Tickers under SP500 / IWM / NASDAQ only. <b>pre8</b> = buy T-8, sell T-1 (before
+					news). <b>post1d</b> = direction after the print. No epsActual in features.
+				</p>
+				{#if !Object.keys(specialists).length}
+					<p class="pending mono">
+						Rebuild tables then:
+						<code>python -m aether.cli earnings-specialist --universe sp500 --mode pre8</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>RUN</th>
+								<th class="r">N TEST</th>
+								<th class="r">ACC</th>
+								<th class="r">LIFT</th>
+								<th class="r">LONG µ</th>
+								<th class="r">SHORT µ</th>
+								<th class="r">VOL SPIKE</th>
+								<th>CUT</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(specialists) as [u, s] (u)}
+								{@const row = s as Record<string, unknown>}
+								<tr>
+									<td class="mono">{u}</td>
+									<td class="r mono">{fmtInt(row.n_test as number)}</td>
+									<td class="r mono">{fmtNum(row.accuracy as number, 3)}</td>
+									<td class="r mono">{fmtNum(row.lift as number, 3)}</td>
+									<td class="r mono pos"
+										>{fmtPct(
+											(row.long_mean_pnl ??
+												row.long_only_mean_pre8 ??
+												row.long_only_mean_post_1d) as number
+										)}</td
+									>
+									<td class="r mono neg"
+										>{fmtPct(
+											(row.short_mean_pnl ??
+												row.short_only_mean_pre8 ??
+												row.short_only_mean_post_1d) as number
+										)}</td
+									>
+									<td class="r mono">{fmtNum(row.mean_vol_spike_8_oos as number, 2)}</td>
+									<td class="mono">{String(row.cut_date ?? '—')}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</Panel>
+
+			<Panel title="SP500 Multi-TF Research" tag="LOCAL CHARTS" accent="cyan">
+				{#if !Object.keys(mtfResearch).length}
+					<p class="pending mono">
+						Run <code>python -m aether.cli mtf-research --interval 15min</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>RUN</th>
+								<th class="r">SYMS</th>
+								<th class="r">BARS</th>
+								<th class="r">ACC</th>
+								<th class="r">LIFT</th>
+								<th class="r">LONG µ</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(mtfResearch) as [name, s] (name)}
+								{@const row = s as Record<string, unknown>}
+								<tr>
+									<td class="mono">{name}</td>
+									<td class="r mono">{fmtInt(row.n_symbols as number)}</td>
+									<td class="r mono">{fmtInt(row.n_bars as number)}</td>
+									<td class="r mono">{fmtNum(row.accuracy as number, 3)}</td>
+									<td class="r mono">{fmtNum(row.lift as number, 3)}</td>
+									<td class="r mono">{fmtPct(row.mean_fwd_when_long as number)}</td>
 								</tr>
 							{/each}
 						</tbody>
