@@ -10,9 +10,12 @@
 	const flight = $derived(data.flight);
 	const summaries = $derived(data.earnings?.summaries ?? {});
 	const panels = $derived(data.earnings?.panels ?? {});
+	const specialists = $derived(data.earnings?.specialists ?? {});
+	const mtfResearch = $derived(data.earnings?.mtfResearch ?? {});
 	const mtf = $derived(data.mtf ?? {});
 	const sp = $derived((summaries.sp500 ?? null) as Record<string, unknown> | null);
 	const iwm = $derived((summaries.iwm ?? null) as Record<string, unknown> | null);
+	const spSpec = $derived((specialists.sp500 ?? null) as Record<string, unknown> | null);
 
 	function meanOf(s: Record<string, unknown> | null, key: string): number | null {
 		if (!s) return null;
@@ -55,10 +58,10 @@
 				large
 			/>
 			<MetricTile
-				label="Miss post 1d"
-				value={fmtPct(sp?.miss_post_ret_1d_mean as number)}
-				sub={sp ? `n=${fmtInt(sp.miss_n as number)}` : '—'}
-				tone="neg"
+				label="Specialist long OOS"
+				value={fmtPct(spSpec?.long_only_mean_post_1d as number)}
+				sub={spSpec ? `acc ${fmtNum(spSpec.accuracy as number, 3)}` : 'run earn-ml'}
+				tone="pos"
 				large
 			/>
 		</div>
@@ -120,6 +123,82 @@
 									<td class="r mono">{fmtPct(meanOf(row, 'post_ret_5d'))}</td>
 									<td class="r mono pos">{fmtPct(row.beat_post_ret_1d_mean as number)}</td>
 									<td class="r mono neg">{fmtPct(row.miss_post_ret_1d_mean as number)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</Panel>
+
+			<Panel title="Earnings Specialist (pre-event)" tag="OOS TIME-CUT" accent="pos">
+				{#if !Object.keys(specialists).length}
+					<p class="pending mono">
+						Run <code>python -m aether.cli earnings-specialist --universe sp500</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>UNIV</th>
+								<th class="r">N TEST</th>
+								<th class="r">ACC</th>
+								<th class="r">BASE</th>
+								<th class="r">LIFT</th>
+								<th class="r">LONG µ1d</th>
+								<th class="r">SHORT µ1d</th>
+								<th>CUT</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(specialists) as [u, s] (u)}
+								{@const row = s as Record<string, unknown>}
+								<tr>
+									<td class="mono">{u}</td>
+									<td class="r mono">{fmtInt(row.n_test as number)}</td>
+									<td class="r mono">{fmtNum(row.accuracy as number, 3)}</td>
+									<td class="r mono">{fmtNum(row.base_rate as number, 3)}</td>
+									<td class="r mono">{fmtNum(row.lift as number, 3)}</td>
+									<td class="r mono pos">{fmtPct(row.long_only_mean_post_1d as number)}</td>
+									<td class="r mono neg">{fmtPct(row.short_only_mean_post_1d as number)}</td>
+									<td class="mono">{String(row.cut_date ?? '—')}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="note mono">
+						Pre-event features only (no epsActual). Classification ~base-rate is honest; ranking
+						edge shows in long/short mean post returns when confidence filters fire.
+					</p>
+				{/if}
+			</Panel>
+
+			<Panel title="SP500 Multi-TF Research" tag="LOCAL CHARTS" accent="cyan">
+				{#if !Object.keys(mtfResearch).length}
+					<p class="pending mono">
+						Run <code>python -m aether.cli mtf-research --interval 15min</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>RUN</th>
+								<th class="r">SYMS</th>
+								<th class="r">BARS</th>
+								<th class="r">ACC</th>
+								<th class="r">LIFT</th>
+								<th class="r">LONG µ</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(mtfResearch) as [name, s] (name)}
+								{@const row = s as Record<string, unknown>}
+								<tr>
+									<td class="mono">{name}</td>
+									<td class="r mono">{fmtInt(row.n_symbols as number)}</td>
+									<td class="r mono">{fmtInt(row.n_bars as number)}</td>
+									<td class="r mono">{fmtNum(row.accuracy as number, 3)}</td>
+									<td class="r mono">{fmtNum(row.lift as number, 3)}</td>
+									<td class="r mono">{fmtPct(row.mean_fwd_when_long as number)}</td>
 								</tr>
 							{/each}
 						</tbody>

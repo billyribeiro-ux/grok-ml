@@ -158,13 +158,24 @@ def load_iwm() -> list[str]:
 
 
 def load_nasdaq() -> list[str]:
+    """
+    Default: full NASDAQ batch (~14k).
+    Subset: FMP_NASDAQ_MODE=n100 or --nasdaq-mode n100 uses nasdaq100_tickers.json.
+    """
+    mode = os.getenv("FMP_NASDAQ_MODE", "full").strip().lower()
+    n100_path = LACIE / "nasdaq_full" / "nasdaq100_tickers.json"
+    if mode in ("n100", "nasdaq100", "100") and n100_path.exists():
+        syms = json.loads(n100_path.read_text())
+        syms = [str(s).strip() for s in syms if s]
+        print(f"NASDAQ-100 universe n={len(syms)} (FMP_NASDAQ_MODE={mode})", flush=True)
+        return syms
     batch = LACIE / "nasdaq_full" / "batch_exchange_nasdaq.json"
     if not batch.exists():
         print("NASDAQ batch missing — skipping nasdaq universe", flush=True)
         return []
     rows = json.loads(batch.read_text())
     syms = [str(r.get("symbol", "")).strip() for r in rows if r.get("symbol")]
-    print(f"NASDAQ universe n={len(syms)}", flush=True)
+    print(f"NASDAQ FULL universe n={len(syms)} (mode={mode})", flush=True)
     return syms
 
 
@@ -458,17 +469,24 @@ def main() -> int:
         help="comma list of intervals",
     )
     ap.add_argument("--workers", type=int, default=0, help="override FMP_MTF_WORKERS")
+    ap.add_argument(
+        "--nasdaq-mode",
+        default="",
+        help="full (default) or n100 — sets FMP_NASDAQ_MODE for this run",
+    )
     args = ap.parse_args()
     global WORKERS
     if args.workers > 0:
         WORKERS = args.workers
+    if args.nasdaq_mode.strip():
+        os.environ["FMP_NASDAQ_MODE"] = args.nasdaq_mode.strip().lower()
 
     universes = [u.strip() for u in args.only.split(",") if u.strip()]
     intervals = [i.strip() for i in args.intervals.split(",") if i.strip()]
 
     print(
         f"MTF archive window {START}→{END} universes={universes} intervals={intervals} "
-        f"workers={WORKERS} sleep={SLEEP}",
+        f"workers={WORKERS} sleep={SLEEP} nasdaq_mode={os.getenv('FMP_NASDAQ_MODE', 'full')}",
         flush=True,
     )
     print(f"started {now()}", flush=True)

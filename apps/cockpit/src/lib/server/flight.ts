@@ -68,6 +68,8 @@ const EARNINGS_ARCHIVE = '/Volumes/LaCie/Aether/data/raw/fmp/earnings_archive';
 export function loadEarningsResearch(): {
 	summaries: Record<string, Record<string, unknown>>;
 	panels: Record<string, { exists: boolean; path: string }>;
+	specialists: Record<string, Record<string, unknown>>;
+	mtfResearch: Record<string, Record<string, unknown>>;
 	meta: Record<string, unknown> | null;
 } {
 	const summaries: Record<string, Record<string, unknown>> = {};
@@ -81,9 +83,25 @@ export function loadEarningsResearch(): {
 		const p = join(EARNINGS_ARCHIVE, 'panels', `${u}_2018_20260710.parquet`);
 		panels[u] = { exists: existsSync(p), path: p };
 	}
+	const researchRoot = '/Volumes/LaCie/Aether/data/processed/research';
+	const specialists: Record<string, Record<string, unknown>> = {};
+	for (const u of ['sp500', 'iwm'] as const) {
+		const j = tryReadJsonFile(join(researchRoot, `earnings_specialist_${u}.json`));
+		if (j) specialists[u] = j;
+	}
+	const mtfResearch: Record<string, Record<string, unknown>> = {};
+	for (const name of [
+		'mtf_research_sp500_15min_y_up_5.json',
+		'mtf_research_sp500_1hour_y_up_5.json'
+	]) {
+		const j = tryReadJsonFile(join(researchRoot, name));
+		if (j) mtfResearch[name.replace('mtf_research_', '').replace('.json', '')] = j;
+	}
 	return {
 		summaries,
 		panels,
+		specialists,
+		mtfResearch,
 		meta: tryReadJsonFile(join(EARNINGS_ARCHIVE, 'meta.json'))
 	};
 }
