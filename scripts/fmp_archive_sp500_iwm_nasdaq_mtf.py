@@ -393,6 +393,30 @@ def _write_chart(path: Path, sym: str, interval: str, bars: list[dict]) -> str:
     return "ok"
 
 
+def chart_is_complete(path: Path, interval: str) -> bool:
+    """
+    True only if real bars are on disk.
+    Empty markers and tiny/corrupt files are NOT complete — re-pull them.
+    """
+    if not path.exists():
+        return False
+    min_b = MIN_BYTES.get(interval, 200)
+    if path.stat().st_size < min_b:
+        return False
+    try:
+        raw = json.loads(path.read_text())
+    except Exception:
+        return False
+    if isinstance(raw, dict):
+        if raw.get("empty"):
+            return False
+        bars = raw.get("bars") or raw.get("historical") or []
+        return isinstance(bars, list) and len(bars) > 0
+    if isinstance(raw, list):
+        return len(raw) > 0
+    return False
+
+
 def archive_charts(universe: str, symbols: list[str], intervals: list[str]) -> None:
     for interval in intervals:
         if interval == "eod":
@@ -401,7 +425,7 @@ def archive_charts(universe: str, symbols: list[str], intervals: list[str]) -> N
         skip = 0
         for sym in symbols:
             path = chart_path(universe, interval, sym)
-            if path.exists() and path.stat().st_size >= MIN_BYTES.get(interval, 200):
+            if chart_is_complete(path, interval):
                 skip += 1
             else:
                 need.append(sym)

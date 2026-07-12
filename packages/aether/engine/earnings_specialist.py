@@ -119,6 +119,9 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
             pd.to_numeric(df["last_eps_surprise_pct"], errors="coerce").fillna(0.0)
         )
 
+    # Winsorize insane returns (bad prints / splits) — keep honest rows, drop junk tails
+    MAX_ABS_RET = 0.50  # ±50% 1d/8d move kept for specialist training
+
     if mode == "post1d":
         label = "y_up_post_1d"
         pnl = "post_ret_1d"
@@ -126,6 +129,8 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
         if pnl not in df.columns:
             raise ValueError("event table missing post_ret_1d — rebuild event tables")
         df = df.dropna(subset=[pnl]).copy()
+        df[pnl] = pd.to_numeric(df[pnl], errors="coerce")
+        df = df[df[pnl].abs() <= MAX_ABS_RET].copy()
         df[label] = (df[pnl].astype(float) > 0).astype(float)
         df["pnl"] = df[pnl].astype(float)
     elif mode == "pre8":
@@ -142,6 +147,8 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
             if c not in df.columns:
                 df[c] = np.nan
         df = df.dropna(subset=[pnl]).copy()
+        df[pnl] = pd.to_numeric(df[pnl], errors="coerce")
+        df = df[df[pnl].abs() <= MAX_ABS_RET].copy()
         df[label] = (df[pnl].astype(float) > 0).astype(float)
         df["pnl"] = df[pnl].astype(float)
     else:
