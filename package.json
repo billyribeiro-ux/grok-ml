@@ -1,0 +1,17 @@
+{
+  "name": "aether-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm dev:all",
+    "dev:front": "pnpm --filter aether-cockpit dev -- --host 127.0.0.1 --port 5173",
+    "dev:backend": "bash scripts/dev_backend.sh",
+    "dev:all": "pnpm exec concurrently -k -n front,back -c cyan,magenta \"pnpm dev:front\" \"pnpm dev:backend\"",
+    "build": "pnpm --filter aether-cockpit build",
+    "check": "pnpm --filter aether-cockpit check"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
