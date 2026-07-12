@@ -148,11 +148,13 @@ def build_earnings_event_table(
                 rec["ret_1_at_t8"] = np.nan
                 rec["trail_vol_20"] = np.nan
 
-            # vol spike: realized vol in 8d pre window vs trail
+            # vol spike: realized vol in 8d pre window vs trail (floor trail to avoid 1e6 spikes)
             pv8 = rec.get("pre_vol_8d")
             tv = rec.get("trail_vol_20")
-            if pv8 is not None and tv is not None and pd.notna(pv8) and pd.notna(tv) and tv > 1e-12:
-                rec["vol_spike_8"] = float(pv8 / tv)
+            if pv8 is not None and tv is not None and pd.notna(pv8) and pd.notna(tv):
+                tv_f = max(float(tv), 1e-4)
+                spike = float(pv8) / tv_f
+                rec["vol_spike_8"] = float(min(spike, 5.0))  # cap at 5x
             else:
                 rec["vol_spike_8"] = np.nan
 

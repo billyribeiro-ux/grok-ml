@@ -858,9 +858,16 @@ def main() -> None:
         cmd_earnings_specialist(rest)
     elif cmd in ("mtf-research", "mtf", "sp500-mtf"):
         cmd_mtf_research(rest)
+    elif cmd in ("ready", "ready-snapshot", "snapshot"):
+        import subprocess
+        from pathlib import Path as _P
+
+        script = _P(__file__).resolve().parents[2] / "scripts" / "build_research_ready_snapshot.py"
+        raise SystemExit(subprocess.call([sys.executable, str(script), *rest]))
     else:
         print(f"unknown command: {cmd}")
         sys.exit(2)
+
 
 
 if __name__ == "__main__":

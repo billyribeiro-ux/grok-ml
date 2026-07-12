@@ -119,6 +119,14 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
             pd.to_numeric(df["last_eps_surprise_pct"], errors="coerce").fillna(0.0)
         )
 
+    # Cap pathological vol spikes (near-zero trail vol on illiquid names)
+    if "vol_spike_8" in df.columns:
+        vs = pd.to_numeric(df["vol_spike_8"], errors="coerce")
+        df["vol_spike_8"] = vs.clip(lower=0.0, upper=5.0)
+    if "trail_vol_20" in df.columns:
+        tv = pd.to_numeric(df["trail_vol_20"], errors="coerce")
+        df["trail_vol_20"] = tv.clip(lower=1e-4)
+
     # Winsorize insane returns (bad prints / splits) — keep honest rows, drop junk tails
     MAX_ABS_RET = 0.50  # ±50% 1d/8d move kept for specialist training
 
