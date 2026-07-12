@@ -831,7 +831,8 @@ def main() -> None:
         print(
             "usage: python -m aether.cli "
             "[integrity|f1|engine-flight|status|walkforward|risk-sweep|"
-            "horizon|archive-status|earnings-specialist|mtf-research] …"
+            "horizon|archive-status|earnings-specialist|mtf-research|"
+            "ready|pre8-backtest] …"
         )
         sys.exit(2)
     cmd = sys.argv[1]
@@ -864,6 +865,32 @@ def main() -> None:
 
         script = _P(__file__).resolve().parents[2] / "scripts" / "build_research_ready_snapshot.py"
         raise SystemExit(subprocess.call([sys.executable, str(script), *rest]))
+    elif cmd in ("pre8-backtest", "pre8-bt", "rumor-backtest"):
+        parser = argparse.ArgumentParser(description="Pre8 paper backtest from OOS scores")
+        parser.add_argument("--universe", default="all", help="sp500|iwm|nasdaq|all")
+        parser.add_argument("--long-threshold", type=float, default=0.55)
+        parser.add_argument("--short-threshold", type=float, default=0.45)
+        args = parser.parse_args(rest)
+        from aether.engine.pre8_backtest import run_all_pre8_backtests, run_pre8_backtest
+
+        if args.universe == "all":
+            results = run_all_pre8_backtests()
+            for u, r in results.items():
+                print(
+                    f"{u}: long_n={r.n_long} mean_long={r.mean_long} "
+                    f"cum_long={r.cum_long_only:.3f} hit={r.hit_rate_long} → {r.path}"
+                )
+        else:
+            r = run_pre8_backtest(
+                args.universe,
+                long_threshold=args.long_threshold,
+                short_threshold=args.short_threshold,
+            )
+            print(
+                f"{r.universe}: long_n={r.n_long} mean_long={r.mean_long} "
+                f"cum_long={r.cum_long_only:.3f} hit={r.hit_rate_long} → {r.path}"
+            )
+        sys.exit(0)
     else:
         print(f"unknown command: {cmd}")
         sys.exit(2)

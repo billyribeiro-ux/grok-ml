@@ -26,6 +26,21 @@
 	const tel = $derived((status?.telemetry as Record<string, unknown> | undefined) ?? {});
 	const flight = $derived(data.flight);
 	const stats = $derived(flight?.stats ?? {});
+	const mtf = $derived(data.mtf ?? {});
+	const ready = $derived(data.ready as Record<string, unknown> | null);
+	const pre8 = $derived(data.pre8 ?? {});
+	const canRun = $derived(
+		((ready?.can_run_now as string[] | undefined) ?? []).join(', ') || '—'
+	);
+	const waiting = $derived(
+		((ready?.still_waiting as string[] | undefined) ?? []).join(', ') || '—'
+	);
+	const mtfRows = $derived(
+		Object.entries(mtf).map(([u, v]) => ({
+			universe: u,
+			...(v as Record<string, number>)
+		}))
+	);
 </script>
 
 <Shell
@@ -64,6 +79,83 @@
 		</div>
 
 		<div class="grid">
+			<Panel title="Ready vs Waiting" tag="MAIN PROMPT" accent="pos">
+				<div class="row2">
+					<div>
+						<div class="lbl">CAN RUN NOW</div>
+						<div class="mono ok">{canRun}</div>
+					</div>
+					<div>
+						<div class="lbl">STILL WAITING</div>
+						<div class="mono warn">{waiting}</div>
+					</div>
+				</div>
+			</Panel>
+
+			<Panel title="Multi-TF Fill (live)" tag="IWM + NASDAQ GRIND" accent="cyan">
+				<table class="tbl">
+					<thead>
+						<tr>
+							<th>UNIV</th>
+							<th class="r">EOD</th>
+							<th class="r">1H</th>
+							<th class="r">15M</th>
+							<th class="r">5M</th>
+							<th class="r">1M</th>
+							<th class="r">TGT</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each mtfRows as r (r.universe)}
+							<tr>
+								<td class="mono">{r.universe}</td>
+								<td class="r mono">{fmtInt(r.eod)}</td>
+								<td class="r mono">{fmtInt(r['1hour'])}</td>
+								<td class="r mono">{fmtInt(r['15min'])}</td>
+								<td class="r mono">{fmtInt(r['5min'])}</td>
+								<td class="r mono">{fmtInt(r['1min'])}</td>
+								<td class="r mono dim">{fmtInt(r.target)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</Panel>
+
+			<Panel title="Pre8 Paper Backtest" tag="BUY RUMOR" accent="violet">
+				{#if !Object.keys(pre8).length || !Object.values(pre8).some(Boolean)}
+					<p class="pending mono">Run <code>python -m aether.cli pre8-backtest</code></p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>UNIV</th>
+								<th class="r">N LONG</th>
+								<th class="r">MEAN</th>
+								<th class="r">HIT</th>
+								<th class="r">CUM*</th>
+								<th class="r">MAX DD</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(pre8) as [u, s] (u)}
+								{#if s}
+									{@const row = s as Record<string, unknown>}
+									<tr>
+										<td class="mono">{u}</td>
+										<td class="r mono">{fmtInt(row.n_long as number)}</td>
+										<td class="r mono">{fmtPct(row.mean_long as number)}</td>
+										<td class="r mono">{fmtPct(row.hit_rate_long as number)}</td>
+										<td class="r mono">{fmtPct(row.cum_long_only as number)}</td>
+										<td class="r mono">{fmtPct(row.max_dd_long_only as number)}</td>
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
+					<p class="pending mono">*Sequential event compound (not concurrent book).</p>
+				{/if}
+			</Panel>
+
 			<Panel title="Archive Inventory" tag="LIVE WHILE DOWNLOADS RUN" accent="amber">
 				{#if !archiveRows.length}
 					<p class="pending mono">
@@ -187,6 +279,31 @@
 	.dim {
 		color: var(--text-faint);
 		font-size: 10px;
+	}
+	.row2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+	.lbl {
+		font-size: 9px;
+		letter-spacing: 0.1em;
+		color: var(--text-mute);
+		margin-bottom: 4px;
+	}
+	.ok {
+		color: var(--pos, #3dffa8);
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.warn {
+		color: var(--amber, #ffb020);
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.pending {
+		font-size: 11px;
+		opacity: 0.8;
 	}
 	.logblk {
 		margin-bottom: 10px;
