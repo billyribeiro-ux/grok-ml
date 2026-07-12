@@ -238,7 +238,7 @@ def phase_commodities_indices() -> None:
             print(f"  index-list symbols={len(symbols)} — pulling EOD for each", flush=True)
             for i, sym in enumerate(symbols):
                 safe = str(sym).replace("^", "").replace("/", "_")
-                save(f"allidx_{safe}", "historical-price-eod/full", {"symbol": sym, "from": "2019-01-01", "to": end}, Path(f"indices/all_eod/{safe}.json"), 80)
+                save(f"allidx_{safe}", "historical-price-eod/full", {"symbol": sym, "from": "2018-01-01", "to": end}, Path(f"indices/all_eod/{safe}.json"), 80)
                 if (i + 1) % 25 == 0:
                     print(f"  ... indices {i+1}/{len(symbols)} ok={_ok}", flush=True)
         except Exception as e:
@@ -247,7 +247,7 @@ def phase_commodities_indices() -> None:
 
 def phase_core_enrichment() -> None:
     print("\n[4] CORE ENRICHMENT (fundamentals/flow for trading universe)", flush=True)
-    start = "2015-01-01"
+    start = "2018-01-01"
     end = ASOF.isoformat()
     for sym in CORE:
         base = Path(f"enrichment/{sym}")
@@ -275,7 +275,7 @@ def phase_core_enrichment() -> None:
             save(
                 f"{sym}_{tech}",
                 f"technical-indicators/{tech}",
-                {"symbol": sym, "timeframe": "1day", "from": "2019-01-01", "to": end, **extra},
+                {"symbol": sym, "timeframe": "1day", "from": "2018-01-01", "to": end, **extra},
                 base / f"tech_{tech}.json",
                 50,
             )

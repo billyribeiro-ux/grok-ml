@@ -30,7 +30,7 @@ Requires LaCie mounted at `/Volumes/LaCie/Aether`.
 python -m aether.cli integrity
 
 # F1 — daily features for core symbols from eod-bulk → feature store
-python -m aether.cli f1 --start 2019-01-01 --end 2026-07-10
+python -m aether.cli f1 --start 2018-01-01 --end 2026-07-10
 
 # unit tests (no LaCie required)
 pytest -q
@@ -39,7 +39,7 @@ pytest -q
 python -m aether.cli engine-flight
 
 # real LaCie eod-bulk flight (requires mount)
-python -m aether.cli lacie-flight --symbols SPY,QQQ,IWM,SQQQ,SH --start 2020-01-01 --end 2026-07-10
+python -m aether.cli lacie-flight --symbols SPY,QQQ,IWM,SQQQ,SH --start 2018-01-01 --end 2026-07-10
 
 # cockpit (telemetry UI)
 cd apps/cockpit && npm install && npm run dev

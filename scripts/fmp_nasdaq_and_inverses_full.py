@@ -5,7 +5,7 @@ Aether — Full NASDAQ book + comprehensive inverse ETF archive (FMP Ultimate).
 LaCie only. Skip-if-exists. Patient 429 backoff.
 
 1) NASDAQ exchange batch freeze + full symbol list
-2) Per-symbol EOD 2015-01-01 → 2026-07-10 for every NASDAQ batch symbol
+2) Per-symbol EOD 2018-01-01 → 2026-07-10 for every NASDAQ batch symbol
 3) Screener pack (profile / key-metrics / ratios / float) for liquid NASDAQ
    (volume>0 on freeze, else top N by any price)
 4) Comprehensive US inverse/short/vol ETFs from etf-list name filter
@@ -41,7 +41,7 @@ if not Path("/Volumes/LaCie/Aether").exists():
 
 BASE = "https://financialmodelingprep.com/stable"
 ASOF = date(2026, 7, 10)
-START = os.getenv("FMP_NASDAQ_START", "2015-01-01")
+START = os.getenv("FMP_NASDAQ_START", "2018-01-01")
 END = ASOF.isoformat()
 START_5M = os.getenv("FMP_NASDAQ_5M_FROM", "2024-07-10")  # 2y would be huge; default ~1y
 START_1M = os.getenv("FMP_NASDAQ_1M_FROM", (ASOF - timedelta(days=90)).isoformat())  # 90d default

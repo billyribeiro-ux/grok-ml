@@ -54,7 +54,7 @@ def cmd_f1_features(argv: list[str] | None = None) -> None:
         default=",".join(F1_CORE_SYMBOLS),
         help="comma-separated symbols",
     )
-    parser.add_argument("--start", default="2019-01-01", help="YYYY-MM-DD")
+    parser.add_argument("--start", default="2018-01-01", help="YYYY-MM-DD")
     parser.add_argument("--end", default="2026-07-10", help="YYYY-MM-DD")
     parser.add_argument(
         "--name",
@@ -109,8 +109,8 @@ def cmd_engine_flight(argv: list[str] | None = None) -> None:
     parser.add_argument("--lacie", action="store_true", help="use LaCie eod-bulk source")
     parser.add_argument(
         "--start",
-        default="2019-01-01",
-        help="pin train/test calendar (default 2019-01-01 so growing eod_bulk does not shift cuts)",
+        default="2018-01-01",
+        help="pin train/test calendar (default 2018-01-01→2026-07-10 so growing eod_bulk does not shift cuts)",
     )
     parser.add_argument("--end", default="2026-07-10")
     parser.add_argument("--train-frac", type=float, default=0.7)
@@ -428,7 +428,7 @@ def cmd_walkforward(argv: list[str] | None = None) -> None:
     parser.add_argument("--universe", default=None, help="named universe e.g. sector_spdr, research_liquid")
     parser.add_argument("--max-positions", type=int, default=5)
     parser.add_argument("--min-confidence", type=float, default=0.55)
-    parser.add_argument("--start", default="2019-01-01")
+    parser.add_argument("--start", default="2018-01-01")
     parser.add_argument("--end", default="2026-07-10")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -509,7 +509,7 @@ def cmd_horizon_compare(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Label-horizon OOS compare")
     parser.add_argument("--symbols", default="SPY,QQQ,IWM,SQQQ,SH,AAPL,NVDA")
     parser.add_argument("--lacie", action="store_true")
-    parser.add_argument("--start", default="2019-01-01")
+    parser.add_argument("--start", default="2018-01-01")
     parser.add_argument("--end", default="2026-07-10")
     parser.add_argument("--max-positions", type=int, default=5)
     parser.add_argument("--json", action="store_true")
@@ -580,7 +580,7 @@ def cmd_risk_sweep(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Risk-config OOS sweep (single cut)")
     parser.add_argument("--symbols", default="SPY,QQQ,IWM,SQQQ,SH,AAPL,NVDA")
     parser.add_argument("--lacie", action="store_true")
-    parser.add_argument("--start", default="2019-01-01")
+    parser.add_argument("--start", default="2018-01-01")
     parser.add_argument("--end", default="2026-07-10")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -633,12 +633,78 @@ def cmd_risk_sweep(argv: list[str] | None = None) -> None:
     sys.exit(0)
 
 
+def cmd_archive_status(argv: list[str] | None = None) -> None:
+    """Local-only: earnings panels + multi-TF inventory (no network)."""
+    parser = argparse.ArgumentParser(description="Aether archive status (earnings + MTF)")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    report: dict = {"window": "2018-01-01→2026-07-10"}
+    try:
+        from aether.loaders.earnings import PANEL_FILES, earnings_panel
+
+        earn = {}
+        for name, path in PANEL_FILES.items():
+            if path.exists():
+                df = earnings_panel(name)
+                times = (
+                    df["time"].astype(str).value_counts(dropna=False).to_dict()
+                    if "time" in df.columns
+                    else {}
+                )
+                earn[name] = {
+                    "path": str(path),
+                    "events": int(len(df)),
+                    "symbols": int(df["symbol"].nunique()) if not df.empty else 0,
+                    "times": {str(k): int(v) for k, v in times.items()},
+                }
+            else:
+                earn[name] = {"path": str(path), "missing": True}
+        report["earnings"] = earn
+    except Exception as e:
+        report["earnings_error"] = str(e)
+
+    try:
+        from aether.loaders.mtf_charts import inventory
+
+        report["mtf"] = {
+            u: inventory(u).to_dict(orient="records") for u in ("sp500", "iwm", "nasdaq")
+        }
+    except Exception as e:
+        report["mtf_error"] = str(e)
+
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+    else:
+        print("Aether archive status (local)")
+        print(f"  window: {report['window']}")
+        if "earnings" in report:
+            print("  earnings panels:")
+            for k, v in report["earnings"].items():
+                if v.get("missing"):
+                    print(f"    {k}: MISSING")
+                else:
+                    print(
+                        f"    {k}: events={v['events']} symbols={v['symbols']} times={v.get('times')}"
+                    )
+        if "mtf" in report:
+            print("  multi-TF files:")
+            for u, rows in report["mtf"].items():
+                for r in rows:
+                    print(
+                        f"    {u}/{r['interval']}: nonempty={r['nonempty']} "
+                        f"empty={r['empty_markers']} files={r['files']}"
+                    )
+    sys.exit(0)
+
+
 def main() -> None:
     """Unified entry: python -m aether.cli integrity|f1|engine-flight|status|walkforward|risk-sweep"""
     if len(sys.argv) < 2:
         print(
             "usage: python -m aether.cli "
-            "[integrity|f1|engine-flight|status|walkforward|risk-sweep] …"
+            "[integrity|f1|engine-flight|status|walkforward|risk-sweep|"
+            "horizon|archive-status] …"
         )
         sys.exit(2)
     cmd = sys.argv[1]
@@ -659,6 +725,8 @@ def main() -> None:
         cmd_risk_sweep(rest)
     elif cmd in ("horizon", "horizon-compare", "horizons"):
         cmd_horizon_compare(rest)
+    elif cmd in ("archive-status", "archives", "mtf-status", "earnings-status"):
+        cmd_archive_status(rest)
     else:
         print(f"unknown command: {cmd}")
         sys.exit(2)

@@ -33,7 +33,7 @@ class MockDailySource(MarketDataSource):
     def __init__(
         self,
         symbols: list[str] | None = None,
-        start: date = date(2019, 1, 2),
+        start: date = date(2018, 1, 2),
         end: date = date(2026, 7, 10),
         seed: int = 42,
     ) -> None:
