@@ -85,9 +85,16 @@ export function loadEarningsResearch(): {
 	}
 	const researchRoot = '/Volumes/LaCie/Aether/data/processed/research';
 	const specialists: Record<string, Record<string, unknown>> = {};
-	for (const u of ['sp500', 'iwm'] as const) {
-		const j = tryReadJsonFile(join(researchRoot, `earnings_specialist_${u}.json`));
-		if (j) specialists[u] = j;
+	for (const u of ['sp500', 'iwm', 'nasdaq'] as const) {
+		for (const mode of ['post1d', 'pre8'] as const) {
+			const j = tryReadJsonFile(join(researchRoot, `earnings_specialist_${u}_${mode}.json`));
+			if (j) {
+				specialists[`${u}_${mode}`] = j;
+			}
+		}
+		// legacy post1d filename
+		const legacy = tryReadJsonFile(join(researchRoot, `earnings_specialist_${u}.json`));
+		if (legacy && !specialists[`${u}_post1d`]) specialists[`${u}_post1d`] = legacy;
 	}
 	const mtfResearch: Record<string, Record<string, unknown>> = {};
 	for (const name of [

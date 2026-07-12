@@ -2,7 +2,12 @@
 Earnings release events from LaCie FMP archive (honest, no network).
 
 Primary source: earnings_archive panels built from daily
-`earnings-calendar` with includeReportTimes (bmo/amc).
+`earnings-calendar` with includeReportTimes (bmo/amc), then filtered to
+**index / book universes**:
+  - sp500  — S&P 500 constituents
+  - iwm    — IWM holdings (Russell 2000 pack)
+  - nasdaq — NASDAQ batch symbols
+  - all    — full market calendar (stockpile; not the default for ML)
 
 Window pin: 2018-01-01 → 2026-07-10 (filter enforced on load if dates present).
 """

@@ -15,7 +15,10 @@
 	const mtf = $derived(data.mtf ?? {});
 	const sp = $derived((summaries.sp500 ?? null) as Record<string, unknown> | null);
 	const iwm = $derived((summaries.iwm ?? null) as Record<string, unknown> | null);
-	const spSpec = $derived((specialists.sp500 ?? null) as Record<string, unknown> | null);
+	const spSpec = $derived(
+		(specialists.sp500_post1d ?? specialists.sp500 ?? null) as Record<string, unknown> | null
+	);
+	const spPre8 = $derived((specialists.sp500_pre8 ?? null) as Record<string, unknown> | null);
 
 	function meanOf(s: Record<string, unknown> | null, key: string): number | null {
 		if (!s) return null;
@@ -58,9 +61,11 @@
 				large
 			/>
 			<MetricTile
-				label="Specialist long OOS"
-				value={fmtPct(spSpec?.long_only_mean_post_1d as number)}
-				sub={spSpec ? `acc ${fmtNum(spSpec.accuracy as number, 3)}` : 'run earn-ml'}
+				label="Pre8 long OOS"
+				value={fmtPct(
+					(spPre8?.long_only_mean_pre8 ?? spPre8?.long_mean_pnl) as number
+				)}
+				sub={spPre8 ? `buy rumor T-8→T-1` : 'rebuild+pre8'}
 				tone="pos"
 				large
 			/>
@@ -130,22 +135,27 @@
 				{/if}
 			</Panel>
 
-			<Panel title="Earnings Specialist (pre-event)" tag="OOS TIME-CUT" accent="pos">
+			<Panel title="Index earnings ML" tag="POST + PRE8 RUMOR" accent="pos">
+				<p class="note mono">
+					Tickers under SP500 / IWM / NASDAQ only. <b>pre8</b> = buy T-8, sell T-1 (before
+					news). <b>post1d</b> = direction after the print. No epsActual in features.
+				</p>
 				{#if !Object.keys(specialists).length}
 					<p class="pending mono">
-						Run <code>python -m aether.cli earnings-specialist --universe sp500</code>
+						Rebuild tables then:
+						<code>python -m aether.cli earnings-specialist --universe sp500 --mode pre8</code>
 					</p>
 				{:else}
 					<table class="tbl">
 						<thead>
 							<tr>
-								<th>UNIV</th>
+								<th>RUN</th>
 								<th class="r">N TEST</th>
 								<th class="r">ACC</th>
-								<th class="r">BASE</th>
 								<th class="r">LIFT</th>
-								<th class="r">LONG µ1d</th>
-								<th class="r">SHORT µ1d</th>
+								<th class="r">LONG µ</th>
+								<th class="r">SHORT µ</th>
+								<th class="r">VOL SPIKE</th>
 								<th>CUT</th>
 							</tr>
 						</thead>
@@ -156,19 +166,27 @@
 									<td class="mono">{u}</td>
 									<td class="r mono">{fmtInt(row.n_test as number)}</td>
 									<td class="r mono">{fmtNum(row.accuracy as number, 3)}</td>
-									<td class="r mono">{fmtNum(row.base_rate as number, 3)}</td>
 									<td class="r mono">{fmtNum(row.lift as number, 3)}</td>
-									<td class="r mono pos">{fmtPct(row.long_only_mean_post_1d as number)}</td>
-									<td class="r mono neg">{fmtPct(row.short_only_mean_post_1d as number)}</td>
+									<td class="r mono pos"
+										>{fmtPct(
+											(row.long_mean_pnl ??
+												row.long_only_mean_pre8 ??
+												row.long_only_mean_post_1d) as number
+										)}</td
+									>
+									<td class="r mono neg"
+										>{fmtPct(
+											(row.short_mean_pnl ??
+												row.short_only_mean_pre8 ??
+												row.short_only_mean_post_1d) as number
+										)}</td
+									>
+									<td class="r mono">{fmtNum(row.mean_vol_spike_8_oos as number, 2)}</td>
 									<td class="mono">{String(row.cut_date ?? '—')}</td>
 								</tr>
 							{/each}
 						</tbody>
 					</table>
-					<p class="note mono">
-						Pre-event features only (no epsActual). Classification ~base-rate is honest; ranking
-						edge shows in long/short mean post returns when confidence filters fire.
-					</p>
 				{/if}
 			</Panel>
 

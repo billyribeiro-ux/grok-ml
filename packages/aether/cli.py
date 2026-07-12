@@ -699,9 +699,15 @@ def cmd_archive_status(argv: list[str] | None = None) -> None:
 
 
 def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
-    """Train/evaluate pre-earnings specialist from LaCie event tables."""
+    """Train/evaluate index-constituent earnings specialists from LaCie event tables."""
     parser = argparse.ArgumentParser(description="Aether earnings specialist (local)")
     parser.add_argument("--universe", default="sp500", choices=["sp500", "iwm", "nasdaq"])
+    parser.add_argument(
+        "--mode",
+        default="post1d",
+        choices=["post1d", "pre8"],
+        help="post1d=after print; pre8=buy rumor T-8→T-1 sell before news",
+    )
     parser.add_argument("--train-frac", type=float, default=0.7)
     parser.add_argument("--min-confidence", type=float, default=0.55)
     parser.add_argument("--json", action="store_true")
@@ -712,6 +718,7 @@ def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
     try:
         r = run_earnings_specialist(
             args.universe,
+            mode=args.mode,  # type: ignore[arg-type]
             train_frac=args.train_frac,
             min_confidence=args.min_confidence,
             write=True,
@@ -725,6 +732,8 @@ def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
             json.dumps(
                 {
                     "universe": r.universe,
+                    "mode": r.mode,
+                    "strategy": r.strategy,
                     "accuracy": r.accuracy,
                     "brier": r.brier,
                     "base_rate": r.base_rate,
@@ -732,21 +741,25 @@ def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
                     "n_train": r.n_train,
                     "n_test": r.n_test,
                     "cut_date": r.cut_date,
-                    "long_only_mean_post_1d": r.long_only_mean_post_1d,
-                    "short_only_mean_post_1d": r.short_only_mean_post_1d,
+                    "long_mean_pnl": r.long_mean_pnl,
+                    "short_mean_pnl": r.short_mean_pnl,
+                    "mean_vol_spike_8_oos": r.mean_vol_spike_8_oos,
                     "path": r.path,
                 },
                 indent=2,
             )
         )
     else:
-        print("Aether earnings specialist")
-        print(f"  universe={r.universe} window={r.window}")
+        print("Aether index earnings specialist")
+        print(f"  universe={r.universe} mode={r.mode} strategy={r.strategy}")
+        print(f"  window={r.window}")
         print(f"  events={r.n_events} train={r.n_train} test={r.n_test} cut={r.cut_date}")
         print(f"  accuracy={r.accuracy:.4f} base_rate={r.base_rate:.4f} lift={r.lift:.4f}")
         print(f"  brier={r.brier:.4f}")
-        print(f"  OOS mean post_1d @p>={args.min_confidence}: {r.long_only_mean_post_1d}")
-        print(f"  OOS mean post_1d @p<={1-args.min_confidence:.2f}: {r.short_only_mean_post_1d}")
+        print(f"  OOS mean pnl @p>={args.min_confidence}: {r.long_mean_pnl}")
+        print(f"  OOS mean pnl @p<={1 - args.min_confidence:.2f}: {r.short_mean_pnl}")
+        if r.mean_vol_spike_8_oos is not None:
+            print(f"  OOS mean vol_spike_8: {r.mean_vol_spike_8_oos:.3f}")
         print(f"  wrote {r.path}")
     sys.exit(0)
 

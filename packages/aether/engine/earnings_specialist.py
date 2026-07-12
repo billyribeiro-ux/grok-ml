@@ -1,11 +1,13 @@
 """
-Earnings / pre-earnings specialist model.
+Earnings specialists for **index constituents** (SP500 / IWM / NASDAQ).
 
-Local-only. Uses event tables on LaCie (no network, no invented rows).
+Modes:
+  post1d — reaction after the print (features known pre-release, no epsActual)
+  pre8   — buy-the-rumor / sell-the-news:
+           enter ~8 sessions before earnings, exit T-1 (before the news).
+           Features known at T-8 entry only (no leak of the 8d run-up itself).
 
-Predicts P(post_ret_1d > 0) from **pre-event only** features so the model
-is usable for pre-earnings / event-day positioning without label leakage
-from actual EPS (unknown until release).
+Local-only. LaCie event tables. No invented rows.
 """
 
 from __future__ import annotations
@@ -13,8 +15,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -24,23 +25,41 @@ from aether.paths import PROCESSED, require_lacie
 
 EVENTS_DIR = PROCESSED / "research" / "earnings_events"
 
-# Features known (or proxyable) before / at open of earnings reaction window
-PRE_EVENT_FEATURES = (
+Mode = Literal["post1d", "pre8"]
+
+# post-print: features known before / without actuals
+POST_FEATURES = (
     "pre_ret_1d",
     "pre_ret_3d",
     "pre_ret_5d",
+    "pre_ret_8d",
+    "vol_spike_8",
     "is_bmo",
     "is_amc",
     "has_eps_estimate",
-    "eps_estimated_z",  # cross-section z within train fold only — filled at fit time
+    "eps_estimated_z",
+    "last_eps_surprise_pct",
 )
 
-LABEL_COL = "y_up_post_1d"
+# buy-rumor at T-8: only history through entry
+PRE8_FEATURES = (
+    "mom_20_at_t8",
+    "mom_5_at_t8",
+    "ret_1_at_t8",
+    "trail_vol_20",
+    "is_bmo",
+    "is_amc",
+    "has_eps_estimate",
+    "eps_estimated_z",
+    "last_eps_surprise_pct",
+)
 
 
 @dataclass
 class EarningsSpecialistResult:
     universe: str
+    mode: str
+    strategy: str
     window: str
     n_events: int
     n_train: int
@@ -50,8 +69,9 @@ class EarningsSpecialistResult:
     brier: float
     base_rate: float
     lift: float
-    long_only_mean_post_1d: float | None
-    short_only_mean_post_1d: float | None
+    long_mean_pnl: float | None
+    short_mean_pnl: float | None
+    mean_vol_spike_8_oos: float | None
     feature_weights: dict[str, float]
     cut_date: str
     written_at: str
@@ -59,7 +79,6 @@ class EarningsSpecialistResult:
 
 
 def load_event_table(universe: str = "sp500") -> pd.DataFrame:
-    """Load parquet event table; raise if missing (honest)."""
     require_lacie()
     path = EVENTS_DIR / f"{universe}_2018_20260710.parquet"
     if not path.exists():
@@ -71,13 +90,12 @@ def load_event_table(universe: str = "sp500") -> pd.DataFrame:
     return df.sort_values(["earnings_date", "symbol"]).reset_index(drop=True)
 
 
-def prepare_specialist_frame(events: pd.DataFrame) -> pd.DataFrame:
-    """Add pre-event features + label; drop rows without post_ret_1d."""
+def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, tuple[str, ...]]:
+    """
+    Returns (frame, label_col, feature_cols).
+    Drops rows missing the mode's PnL label.
+    """
     df = events.copy()
-    if "post_ret_1d" not in df.columns:
-        raise ValueError("event table missing post_ret_1d")
-    df = df.dropna(subset=["post_ret_1d"]).copy()
-    df[LABEL_COL] = (df["post_ret_1d"].astype(float) > 0).astype(float)
     if "time" in df.columns:
         t = df["time"].astype(str).str.lower().fillna("")
         df["is_bmo"] = (t == "bmo").astype(float)
@@ -85,25 +103,55 @@ def prepare_specialist_frame(events: pd.DataFrame) -> pd.DataFrame:
     else:
         df["is_bmo"] = 0.0
         df["is_amc"] = 0.0
+
     if "epsEstimated" in df.columns:
         est = pd.to_numeric(df["epsEstimated"], errors="coerce")
         df["has_eps_estimate"] = est.notna().astype(float)
-        # raw estimate kept; z-scored within train at fit time into eps_estimated_z
         df["eps_estimated_raw"] = est
     else:
         df["has_eps_estimate"] = 0.0
         df["eps_estimated_raw"] = np.nan
-    for c in ("pre_ret_1d", "pre_ret_3d", "pre_ret_5d"):
-        if c not in df.columns:
-            df[c] = np.nan
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
+
+    if "last_eps_surprise_pct" not in df.columns:
+        df["last_eps_surprise_pct"] = 0.0
+    else:
+        df["last_eps_surprise_pct"] = (
+            pd.to_numeric(df["last_eps_surprise_pct"], errors="coerce").fillna(0.0)
+        )
+
+    if mode == "post1d":
+        label = "y_up_post_1d"
+        pnl = "post_ret_1d"
+        feats = POST_FEATURES
+        if pnl not in df.columns:
+            raise ValueError("event table missing post_ret_1d — rebuild event tables")
+        df = df.dropna(subset=[pnl]).copy()
+        df[label] = (df[pnl].astype(float) > 0).astype(float)
+        df["pnl"] = df[pnl].astype(float)
+    elif mode == "pre8":
+        label = "y_up_pre8"
+        pnl = "pre_ret_8d"
+        feats = PRE8_FEATURES
+        if pnl not in df.columns:
+            raise ValueError(
+                "event table missing pre_ret_8d — rebuild with scripts/build_earnings_event_tables.py"
+            )
+        # need entry features too
+        need = ["mom_20_at_t8", "mom_5_at_t8", "ret_1_at_t8", "trail_vol_20"]
+        for c in need:
+            if c not in df.columns:
+                df[c] = np.nan
+        df = df.dropna(subset=[pnl]).copy()
+        df[label] = (df[pnl].astype(float) > 0).astype(float)
+        df["pnl"] = df[pnl].astype(float)
+    else:
+        raise ValueError(f"unknown mode {mode}")
+
+    return df, label, feats
 
 
 def _attach_train_z(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Cross-section z of eps estimate using train stats only (no leak)."""
-    tr = train.copy()
-    te = test.copy()
+    tr, te = train.copy(), test.copy()
     raw = tr["eps_estimated_raw"]
     mu = float(raw.mean()) if raw.notna().any() else 0.0
     sig = float(raw.std()) if raw.notna().any() else 1.0
@@ -117,17 +165,15 @@ def _attach_train_z(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFra
 def run_earnings_specialist(
     universe: str = "sp500",
     *,
+    mode: Mode = "post1d",
     train_frac: float = 0.7,
     min_confidence: float = 0.55,
     write: bool = True,
 ) -> EarningsSpecialistResult:
-    """
-    Time-ordered single cut: train on earlier earnings events, test on later.
-    """
     events = load_event_table(universe)
-    df = prepare_specialist_frame(events)
+    df, label_col, feature_cols = prepare_frame(events, mode)
     if len(df) < 100:
-        raise RuntimeError(f"not enough labeled earnings events: {len(df)}")
+        raise RuntimeError(f"not enough labeled events for {universe}/{mode}: {len(df)}")
 
     dates = sorted(df["earnings_date"].unique())
     cut_idx = int(len(dates) * train_frac)
@@ -138,8 +184,7 @@ def run_earnings_specialist(
     test = df[df["earnings_date"] >= cut].copy()
     train, test = _attach_train_z(train, test)
 
-    # fill pre-ret NaNs neutrally for model rows
-    for c in PRE_EVENT_FEATURES:
+    for c in feature_cols:
         if c not in train.columns:
             train[c] = 0.0
             test[c] = 0.0
@@ -147,32 +192,50 @@ def run_earnings_specialist(
         test[c] = test[c].replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
     scorer = LogisticScorer(
-        feature_cols=PRE_EVENT_FEATURES,
-        label_col=LABEL_COL,
+        feature_cols=feature_cols,
+        label_col=label_col,
         epochs=120,
         lr=0.08,
         l2=1e-3,
     )
     scorer.fit(train)
     proba = scorer.predict_proba(test)
-    y = test[LABEL_COL].to_numpy(dtype=float)
+    y = test[label_col].to_numpy(dtype=float)
     pred = (proba >= 0.5).astype(float)
     acc = float((pred == y).mean()) if len(y) else 0.0
     brier = float(np.mean((proba - y) ** 2)) if len(y) else 1.0
     base = float(y.mean()) if len(y) else 0.5
     lift = acc - max(base, 1.0 - base)
 
-    post = test["post_ret_1d"].to_numpy(dtype=float)
-    long_m = float(post[proba >= min_confidence].mean()) if (proba >= min_confidence).any() else None
-    short_m = float(post[proba <= (1.0 - min_confidence)].mean()) if (proba <= 1.0 - min_confidence).any() else None
+    pnl = test["pnl"].to_numpy(dtype=float)
+    long_m = float(pnl[proba >= min_confidence].mean()) if (proba >= min_confidence).any() else None
+    short_m = (
+        float(pnl[proba <= (1.0 - min_confidence)].mean())
+        if (proba <= 1.0 - min_confidence).any()
+        else None
+    )
+
+    vol_spike_mean = None
+    if "vol_spike_8" in test.columns:
+        vs = pd.to_numeric(test["vol_spike_8"], errors="coerce")
+        if vs.notna().any():
+            vol_spike_mean = float(vs.mean())
 
     weights = {}
     if scorer.w is not None:
         for c, w in zip(scorer.feature_cols, scorer.w):
             weights[c] = float(w)
 
+    strategy = (
+        "buy_rumor_sell_news_t8_to_t1"
+        if mode == "pre8"
+        else "post_print_direction_1d"
+    )
+
     result = EarningsSpecialistResult(
         universe=universe,
+        mode=mode,
+        strategy=strategy,
         window="2018-01-01→2026-07-10",
         n_events=int(len(df)),
         n_train=int(len(train)),
@@ -182,8 +245,9 @@ def run_earnings_specialist(
         brier=brier,
         base_rate=base,
         lift=lift,
-        long_only_mean_post_1d=long_m,
-        short_only_mean_post_1d=short_m,
+        long_mean_pnl=long_m,
+        short_mean_pnl=short_m,
+        mean_vol_spike_8_oos=vol_spike_mean,
         feature_weights=weights,
         cut_date=str(pd.Timestamp(cut).date()),
         written_at=datetime.now(timezone.utc).isoformat(),
@@ -193,26 +257,40 @@ def run_earnings_specialist(
         require_lacie()
         out_dir = PROCESSED / "research"
         out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"earnings_specialist_{universe}.json"
+        path = out_dir / f"earnings_specialist_{universe}_{mode}.json"
+        # also write legacy name for post1d so cockpit keeps working
         payload: dict[str, Any] = asdict(result)
-        payload["label"] = LABEL_COL
-        payload["features"] = list(PRE_EVENT_FEATURES)
+        payload["label"] = label_col
+        payload["features"] = list(feature_cols)
+        payload["long_only_mean_post_1d"] = long_m if mode == "post1d" else None
+        payload["short_only_mean_post_1d"] = short_m if mode == "post1d" else None
+        payload["long_only_mean_pre8"] = long_m if mode == "pre8" else None
+        payload["short_only_mean_pre8"] = short_m if mode == "pre8" else None
         payload["note"] = (
-            "Pre-event features only; does not use epsActual/surprise (unknown pre-release). "
-            "long/short means are mean post_ret_1d on high/low confidence OOS predictions."
+            "Index constituents only. pre8 = enter T-8 exit T-1 (sell before news). "
+            "Features at entry exclude the 8d run-up itself (no label leak)."
+            if mode == "pre8"
+            else "Pre-release features only; no epsActual."
         )
         path.write_text(json.dumps(payload, indent=2, default=str))
+        if mode == "post1d":
+            (out_dir / f"earnings_specialist_{universe}.json").write_text(
+                json.dumps(payload, indent=2, default=str)
+            )
         result.path = str(path)
 
-        # OOS scored events for cockpit / later research
         scored = test[
-            ["symbol", "earnings_date", "time", "post_ret_1d", LABEL_COL]
-            + [c for c in PRE_EVENT_FEATURES if c in test.columns]
+            ["symbol", "earnings_date", "time", "pnl", label_col]
+            + [c for c in feature_cols if c in test.columns]
         ].copy()
-        scored["p_up_post_1d"] = proba
-        scored_path = out_dir / f"earnings_specialist_{universe}_oos.parquet"
+        if "vol_spike_8" in test.columns:
+            scored["vol_spike_8"] = test["vol_spike_8"].values
+        if "pre_ret_8d" in test.columns:
+            scored["pre_ret_8d"] = test["pre_ret_8d"].values
+        if "sell_news_ret" in test.columns:
+            scored["sell_news_ret"] = test["sell_news_ret"].values
+        scored["p_up"] = proba
+        scored_path = out_dir / f"earnings_specialist_{universe}_{mode}_oos.parquet"
         scored.to_parquet(scored_path, index=False)
-        payload["oos_path"] = str(scored_path)
-        path.write_text(json.dumps(payload, indent=2, default=str))
 
     return result
