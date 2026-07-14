@@ -765,8 +765,14 @@ def cmd_earnings_specialist(argv: list[str] | None = None) -> None:
 
 
 def cmd_mtf_research(argv: list[str] | None = None) -> None:
-    """SP500 multi-TF research flight from completed LaCie charts."""
-    parser = argparse.ArgumentParser(description="Aether SP500 multi-TF research (local)")
+    """Multi-TF research flight from completed LaCie charts (sp500/iwm/nasdaq)."""
+    parser = argparse.ArgumentParser(description="Aether multi-TF research (local)")
+    parser.add_argument(
+        "--universe",
+        default="sp500",
+        choices=["sp500", "iwm", "nasdaq"],
+        help="chart pack universe on LaCie",
+    )
     parser.add_argument("--interval", default="15min", choices=["1hour", "15min", "5min", "1min"])
     parser.add_argument("--label", default="y_up_5", choices=["y_up_1", "y_up_5"])
     parser.add_argument("--train-frac", type=float, default=0.7)
@@ -775,15 +781,16 @@ def cmd_mtf_research(argv: list[str] | None = None) -> None:
         "--symbol-limit",
         type=int,
         default=0,
-        help="0 = all SP500 with files; else cap for faster runs",
+        help="0 = all symbols with files; else cap for faster runs",
     )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    from aether.engine.mtf_research import run_sp500_mtf_research
+    from aether.engine.mtf_research import run_mtf_research
 
     try:
-        r = run_sp500_mtf_research(
+        r = run_mtf_research(
+            universe=args.universe,
             interval=args.interval,
             label=args.label,
             train_frac=args.train_frac,
@@ -799,6 +806,7 @@ def cmd_mtf_research(argv: list[str] | None = None) -> None:
         print(
             json.dumps(
                 {
+                    "universe": r.universe,
                     "interval": r.interval,
                     "label": r.label,
                     "n_symbols": r.n_symbols,
@@ -815,10 +823,13 @@ def cmd_mtf_research(argv: list[str] | None = None) -> None:
             )
         )
     else:
-        print("Aether SP500 multi-TF research")
+        print(f"Aether multi-TF research ({r.universe})")
         print(f"  interval={r.interval} label={r.label} symbols={r.n_symbols} bars={r.n_bars}")
         print(f"  train={r.n_train} test={r.n_test} cut={r.cut_date}")
-        print(f"  accuracy={r.accuracy:.4f} base={r.base_rate:.4f} lift={r.lift:.4f} brier={r.brier:.4f}")
+        print(
+            f"  accuracy={r.accuracy:.4f} base={r.base_rate:.4f} "
+            f"lift={r.lift:.4f} brier={r.brier:.4f}"
+        )
         print(f"  mean fwd @long conf: {r.mean_fwd_when_long}")
         print(f"  mean fwd @short conf: {r.mean_fwd_when_short}")
         print(f"  wrote {r.path}")
@@ -832,7 +843,7 @@ def main() -> None:
             "usage: python -m aether.cli "
             "[integrity|f1|engine-flight|status|walkforward|risk-sweep|"
             "horizon|archive-status|earnings-specialist|mtf-research|"
-            "ready|pre8-backtest] …"
+            "ready|pre8-backtest|pre8-grid] …"
         )
         sys.exit(2)
     cmd = sys.argv[1]
@@ -890,6 +901,18 @@ def main() -> None:
                 f"{r.universe}: long_n={r.n_long} mean_long={r.mean_long} "
                 f"cum_long={r.cum_long_only:.3f} hit={r.hit_rate_long} → {r.path}"
             )
+        sys.exit(0)
+    elif cmd in ("pre8-grid", "pre8-threshold", "rumor-grid"):
+        from aether.engine.pre8_threshold_grid import run_pre8_threshold_grid
+
+        payload = run_pre8_threshold_grid(write=True)
+        print(f"wrote {payload.get('path')}")
+        for u, body in (payload.get("universes") or {}).items():
+            if isinstance(body, dict) and body.get("error"):
+                print(f"  {u}: {body['error']}")
+                continue
+            best = (body or {}).get("best_long_n20") if isinstance(body, dict) else None
+            print(f"  {u}: n_oos={body.get('n_oos')} best_long={best}")
         sys.exit(0)
     else:
         print(f"unknown command: {cmd}")

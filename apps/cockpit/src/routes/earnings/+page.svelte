@@ -12,7 +12,11 @@
 	const panels = $derived(data.earnings?.panels ?? {});
 	const specialists = $derived(data.earnings?.specialists ?? {});
 	const mtfResearch = $derived(data.earnings?.mtfResearch ?? {});
-	const mtf = $derived(data.mtf ?? {});
+	const mtf = $derived(
+		((data as PageData & Record<string, unknown>).mtf as
+			| Record<string, Record<string, number>>
+			| undefined) ?? {}
+	);
 	const sp = $derived((summaries.sp500 ?? null) as Record<string, unknown> | null);
 	const iwm = $derived((summaries.iwm ?? null) as Record<string, unknown> | null);
 	const spSpec = $derived(
@@ -37,7 +41,11 @@
 	const mtfRows = $derived(
 		Object.entries(mtf).map(([u, ivs]) => ({
 			universe: u,
-			...(ivs as Record<string, number>)
+			eod: Number(ivs.eod ?? 0),
+			hour1: Number(ivs['1hour'] ?? 0),
+			min15: Number(ivs['15min'] ?? 0),
+			min5: Number(ivs['5min'] ?? 0),
+			min1: Number(ivs['1min'] ?? 0)
 		}))
 	);
 </script>
@@ -135,7 +143,7 @@
 				{/if}
 			</Panel>
 
-			<Panel title="Index earnings ML" tag="POST + PRE8 RUMOR" accent="pos">
+			<Panel title="Index earnings ML" tag="POST + PRE8 RUMOR" accent="green">
 				<p class="note mono">
 					Tickers under SP500 / IWM / NASDAQ only. <b>pre8</b> = buy T-8, sell T-1 (before
 					news). <b>post1d</b> = direction after the print. No epsActual in features.
@@ -241,10 +249,10 @@
 							<tr>
 								<td class="mono">{r.universe}</td>
 								<td class="r mono">{fmtInt(r.eod)}</td>
-								<td class="r mono">{fmtInt(r['1hour'])}</td>
-								<td class="r mono">{fmtInt(r['15min'])}</td>
-								<td class="r mono">{fmtInt(r['5min'])}</td>
-								<td class="r mono">{fmtInt(r['1min'])}</td>
+								<td class="r mono">{fmtInt(r.hour1)}</td>
+								<td class="r mono">{fmtInt(r.min15)}</td>
+								<td class="r mono">{fmtInt(r.min5)}</td>
+								<td class="r mono">{fmtInt(r.min1)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -255,7 +263,7 @@
 				</p>
 			</Panel>
 
-			<Panel title="Mission (2018 pin)" tag="PROMOTED" accent="pos">
+			<Panel title="Mission (2018 pin)" tag="PROMOTED" accent="green">
 				{#if flight?.stats}
 					<div class="mission">
 						<div class="mono name">{flight.name}</div>

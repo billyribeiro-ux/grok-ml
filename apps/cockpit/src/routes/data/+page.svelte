@@ -5,8 +5,10 @@
 	import MetricTile from '$lib/components/MetricTile.svelte';
 	import { fmtInt, fmtNum, fmtUsd, fmtPct } from '$lib/format';
 
+	// Server load fields evolve faster than generated $types; cast once at the edge.
 	let { data }: { data: PageData } = $props();
-	const status = $derived(data.status as Record<string, unknown> | null);
+	const d = $derived(data as PageData & Record<string, unknown>);
+	const status = $derived(d.status as Record<string, unknown> | null);
 	const archives = $derived(
 		(status?.archives as Record<string, Record<string, unknown>> | undefined) ?? {}
 	);
@@ -24,11 +26,40 @@
 			{}
 	);
 	const tel = $derived((status?.telemetry as Record<string, unknown> | undefined) ?? {});
-	const flight = $derived(data.flight);
+	const flight = $derived(d.flight);
 	const stats = $derived(flight?.stats ?? {});
-	const mtf = $derived(data.mtf ?? {});
-	const ready = $derived(data.ready as Record<string, unknown> | null);
-	const pre8 = $derived(data.pre8 ?? {});
+	const mtf = $derived(
+		(d.mtf as Record<string, Record<string, number>> | undefined) ?? {}
+	);
+	const ready = $derived((d.ready as Record<string, unknown> | null) ?? null);
+	const pre8 = $derived(
+		(d.pre8 as Record<string, Record<string, unknown> | null> | undefined) ?? {}
+	);
+	const pre8Grid = $derived((d.pre8Grid as Record<string, unknown> | null) ?? null);
+	const pre8GridUniv = $derived(
+		((pre8Grid?.universes as Record<string, Record<string, unknown>> | undefined) ??
+			{}) as Record<string, Record<string, unknown>>
+	);
+	const mtfResearch = $derived(
+		(d.mtfResearch as Record<string, Record<string, unknown> | null> | undefined) ?? {}
+	);
+	const mtfResearchRows = $derived(
+		Object.entries(mtfResearch)
+			.filter(([, v]) => v != null)
+			.map(([k, v]) => {
+				const row = v as Record<string, unknown>;
+				return {
+					key: k,
+					universe: String(row.universe ?? k.split('_')[0] ?? '—'),
+					interval: String(row.interval ?? '—'),
+					label: String(row.label ?? '—'),
+					n_symbols: Number(row.n_symbols ?? 0),
+					accuracy: row.accuracy as number | undefined,
+					lift: row.lift as number | undefined,
+					mean_long: row.mean_fwd_when_long as number | undefined
+				};
+			})
+	);
 	const canRun = $derived(
 		((ready?.can_run_now as string[] | undefined) ?? []).join(', ') || '—'
 	);
@@ -38,7 +69,12 @@
 	const mtfRows = $derived(
 		Object.entries(mtf).map(([u, v]) => ({
 			universe: u,
-			...(v as Record<string, number>)
+			eod: Number(v.eod ?? 0),
+			hour1: Number(v['1hour'] ?? 0),
+			min15: Number(v['15min'] ?? 0),
+			min5: Number(v['5min'] ?? 0),
+			min1: Number(v['1min'] ?? 0),
+			target: Number(v.target ?? 0)
 		}))
 	);
 </script>
@@ -79,7 +115,7 @@
 		</div>
 
 		<div class="grid">
-			<Panel title="Ready vs Waiting" tag="MAIN PROMPT" accent="pos">
+			<Panel title="Ready vs Waiting" tag="MAIN PROMPT" accent="green">
 				<div class="row2">
 					<div>
 						<div class="lbl">CAN RUN NOW</div>
@@ -110,10 +146,10 @@
 							<tr>
 								<td class="mono">{r.universe}</td>
 								<td class="r mono">{fmtInt(r.eod)}</td>
-								<td class="r mono">{fmtInt(r['1hour'])}</td>
-								<td class="r mono">{fmtInt(r['15min'])}</td>
-								<td class="r mono">{fmtInt(r['5min'])}</td>
-								<td class="r mono">{fmtInt(r['1min'])}</td>
+								<td class="r mono">{fmtInt(r.hour1)}</td>
+								<td class="r mono">{fmtInt(r.min15)}</td>
+								<td class="r mono">{fmtInt(r.min5)}</td>
+								<td class="r mono">{fmtInt(r.min1)}</td>
 								<td class="r mono dim">{fmtInt(r.target)}</td>
 							</tr>
 						{/each}
@@ -153,6 +189,77 @@
 						</tbody>
 					</table>
 					<p class="pending mono">*Sequential event compound (not concurrent book).</p>
+				{/if}
+			</Panel>
+
+			<Panel title="Pre8 Threshold Grid" tag="OOS LONG FILTER" accent="green">
+				{#if !Object.keys(pre8GridUniv).length}
+					<p class="pending mono">Run <code>python -m aether.cli pre8-grid</code></p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>UNIV</th>
+								<th class="r">N OOS</th>
+								<th class="r">BASE MEAN</th>
+								<th class="r">BEST THR</th>
+								<th class="r">N</th>
+								<th class="r">MEAN</th>
+								<th class="r">HIT</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(pre8GridUniv) as [u, body] (u)}
+								{@const best = (body.best_long_n20 as Record<string, unknown> | null) ?? null}
+								<tr>
+									<td class="mono">{u}</td>
+									<td class="r mono">{fmtInt(body.n_oos as number)}</td>
+									<td class="r mono">{fmtPct(body.base_mean as number)}</td>
+									<td class="r mono">{best ? fmtNum(best.thr as number, 2) : '—'}</td>
+									<td class="r mono">{best ? fmtInt(best.n as number) : '—'}</td>
+									<td class="r mono">{best ? fmtPct(best.mean as number) : '—'}</td>
+									<td class="r mono">{best ? fmtPct(best.hit as number) : '—'}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="pending mono">Best long thr among n≥20 OOS events. Not promoted.</p>
+				{/if}
+			</Panel>
+
+			<Panel title="MTF Research Artifacts" tag="READY PACKS" accent="cyan">
+				{#if !mtfResearchRows.length}
+					<p class="pending mono">
+						Run
+						<code>python -m aether.cli mtf-research --universe sp500 --interval 5min</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>BOOK</th>
+								<th>IV</th>
+								<th>LABEL</th>
+								<th class="r">SYMS</th>
+								<th class="r">ACC</th>
+								<th class="r">LIFT</th>
+								<th class="r">FWD@LONG</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each mtfResearchRows as r (r.key)}
+								<tr>
+									<td class="mono">{r.universe}</td>
+									<td class="mono">{r.interval}</td>
+									<td class="mono">{r.label}</td>
+									<td class="r mono">{fmtInt(r.n_symbols)}</td>
+									<td class="r mono">{fmtPct(r.accuracy)}</td>
+									<td class="r mono">{fmtPct(r.lift)}</td>
+									<td class="r mono">{fmtPct(r.mean_long)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				{/if}
 			</Panel>
 

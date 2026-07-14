@@ -59,11 +59,22 @@ export const load: PageServerLoad = async () => {
 		}
 	};
 	const ready = readJson('/Volumes/LaCie/Aether/data/processed/research/ready_snapshot.json');
+	const researchRoot = '/Volumes/LaCie/Aether/data/processed/research';
 	const pre8 = {
-		sp500: readJson('/Volumes/LaCie/Aether/data/processed/research/pre8_backtest_sp500.json'),
-		iwm: readJson('/Volumes/LaCie/Aether/data/processed/research/pre8_backtest_iwm.json'),
-		nasdaq: readJson('/Volumes/LaCie/Aether/data/processed/research/pre8_backtest_nasdaq.json')
+		sp500: readJson(join(researchRoot, 'pre8_backtest_sp500.json')),
+		iwm: readJson(join(researchRoot, 'pre8_backtest_iwm.json')),
+		nasdaq: readJson(join(researchRoot, 'pre8_backtest_nasdaq.json'))
 	};
+	const pre8Grid = readJson(join(researchRoot, 'pre8_threshold_grid.json'));
+	const mtfResearch: Record<string, Record<string, unknown> | null> = {};
+	for (const univ of ['sp500', 'iwm', 'nasdaq'] as const) {
+		for (const iv of ['1hour', '15min', '5min', '1min'] as const) {
+			for (const lab of ['y_up_1', 'y_up_5'] as const) {
+				const key = `${univ}_${iv}_${lab}`;
+				mtfResearch[key] = readJson(join(researchRoot, `mtf_research_${univ}_${iv}_${lab}.json`));
+			}
+		}
+	}
 	return {
 		flight,
 		pathUsed,
@@ -75,6 +86,8 @@ export const load: PageServerLoad = async () => {
 		researchIndex: loadResearchIndex(),
 		mtf,
 		ready,
-		pre8
+		pre8,
+		pre8Grid,
+		mtfResearch
 	};
 };

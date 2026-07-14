@@ -395,24 +395,31 @@ def _write_chart(path: Path, sym: str, interval: str, bars: list[dict]) -> str:
 
 def chart_is_complete(path: Path, interval: str) -> bool:
     """
-    True only if real bars are on disk.
-    Empty markers and tiny/corrupt files are NOT complete — re-pull them.
+    True if we already have a definitive result on disk:
+      - real bar list with data, OR
+      - honest empty marker (FMP returned nothing for this window).
+
+    Empty markers MUST count as complete — otherwise full-book NASDAQ
+    re-pulls thousands of permanently-empty funds/delisteds forever and
+    never advances to the next interval.
+    Corrupt/tiny non-marker files are incomplete and get re-pulled.
     """
     if not path.exists():
-        return False
-    min_b = MIN_BYTES.get(interval, 200)
-    if path.stat().st_size < min_b:
         return False
     try:
         raw = json.loads(path.read_text())
     except Exception:
         return False
     if isinstance(raw, dict):
-        if raw.get("empty"):
-            return False
+        # honest empty from a prior successful probe — do not loop forever
+        if raw.get("empty") is True:
+            return True
         bars = raw.get("bars") or raw.get("historical") or []
         return isinstance(bars, list) and len(bars) > 0
     if isinstance(raw, list):
+        min_b = MIN_BYTES.get(interval, 200)
+        if path.stat().st_size < min_b:
+            return False
         return len(raw) > 0
     return False
 
