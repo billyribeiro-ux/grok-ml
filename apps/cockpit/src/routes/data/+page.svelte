@@ -5,8 +5,10 @@
 	import MetricTile from '$lib/components/MetricTile.svelte';
 	import { fmtInt, fmtNum, fmtUsd, fmtPct } from '$lib/format';
 
+	// Server load fields evolve faster than generated $types; cast once at the edge.
 	let { data }: { data: PageData } = $props();
-	const status = $derived(data.status as Record<string, unknown> | null);
+	const d = $derived(data as PageData & Record<string, unknown>);
+	const status = $derived(d.status as Record<string, unknown> | null);
 	const archives = $derived(
 		(status?.archives as Record<string, Record<string, unknown>> | undefined) ?? {}
 	);
@@ -24,8 +26,57 @@
 			{}
 	);
 	const tel = $derived((status?.telemetry as Record<string, unknown> | undefined) ?? {});
-	const flight = $derived(data.flight);
+	const flight = $derived(d.flight);
 	const stats = $derived(flight?.stats ?? {});
+	const mtf = $derived(
+		(d.mtf as Record<string, Record<string, number>> | undefined) ?? {}
+	);
+	const ready = $derived((d.ready as Record<string, unknown> | null) ?? null);
+	const pre8 = $derived(
+		(d.pre8 as Record<string, Record<string, unknown> | null> | undefined) ?? {}
+	);
+	const pre8Grid = $derived((d.pre8Grid as Record<string, unknown> | null) ?? null);
+	const pre8GridUniv = $derived(
+		((pre8Grid?.universes as Record<string, Record<string, unknown>> | undefined) ??
+			{}) as Record<string, Record<string, unknown>>
+	);
+	const mtfResearch = $derived(
+		(d.mtfResearch as Record<string, Record<string, unknown> | null> | undefined) ?? {}
+	);
+	const mtfResearchRows = $derived(
+		Object.entries(mtfResearch)
+			.filter(([, v]) => v != null)
+			.map(([k, v]) => {
+				const row = v as Record<string, unknown>;
+				return {
+					key: k,
+					universe: String(row.universe ?? k.split('_')[0] ?? '—'),
+					interval: String(row.interval ?? '—'),
+					label: String(row.label ?? '—'),
+					n_symbols: Number(row.n_symbols ?? 0),
+					accuracy: row.accuracy as number | undefined,
+					lift: row.lift as number | undefined,
+					mean_long: row.mean_fwd_when_long as number | undefined
+				};
+			})
+	);
+	const canRun = $derived(
+		((ready?.can_run_now as string[] | undefined) ?? []).join(', ') || '—'
+	);
+	const waiting = $derived(
+		((ready?.still_waiting as string[] | undefined) ?? []).join(', ') || '—'
+	);
+	const mtfRows = $derived(
+		Object.entries(mtf).map(([u, v]) => ({
+			universe: u,
+			eod: Number(v.eod ?? 0),
+			hour1: Number(v['1hour'] ?? 0),
+			min15: Number(v['15min'] ?? 0),
+			min5: Number(v['5min'] ?? 0),
+			min1: Number(v['1min'] ?? 0),
+			target: Number(v.target ?? 0)
+		}))
+	);
 </script>
 
 <Shell
@@ -64,6 +115,154 @@
 		</div>
 
 		<div class="grid">
+			<Panel title="Ready vs Waiting" tag="MAIN PROMPT" accent="green">
+				<div class="row2">
+					<div>
+						<div class="lbl">CAN RUN NOW</div>
+						<div class="mono ok">{canRun}</div>
+					</div>
+					<div>
+						<div class="lbl">STILL WAITING</div>
+						<div class="mono warn">{waiting}</div>
+					</div>
+				</div>
+			</Panel>
+
+			<Panel title="Multi-TF Fill (live)" tag="IWM + NASDAQ GRIND" accent="cyan">
+				<table class="tbl">
+					<thead>
+						<tr>
+							<th>UNIV</th>
+							<th class="r">EOD</th>
+							<th class="r">1H</th>
+							<th class="r">15M</th>
+							<th class="r">5M</th>
+							<th class="r">1M</th>
+							<th class="r">TGT</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each mtfRows as r (r.universe)}
+							<tr>
+								<td class="mono">{r.universe}</td>
+								<td class="r mono">{fmtInt(r.eod)}</td>
+								<td class="r mono">{fmtInt(r.hour1)}</td>
+								<td class="r mono">{fmtInt(r.min15)}</td>
+								<td class="r mono">{fmtInt(r.min5)}</td>
+								<td class="r mono">{fmtInt(r.min1)}</td>
+								<td class="r mono dim">{fmtInt(r.target)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</Panel>
+
+			<Panel title="Pre8 Paper Backtest" tag="BUY RUMOR" accent="violet">
+				{#if !Object.keys(pre8).length || !Object.values(pre8).some(Boolean)}
+					<p class="pending mono">Run <code>python -m aether.cli pre8-backtest</code></p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>UNIV</th>
+								<th class="r">N LONG</th>
+								<th class="r">MEAN</th>
+								<th class="r">HIT</th>
+								<th class="r">CUM*</th>
+								<th class="r">MAX DD</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(pre8) as [u, s] (u)}
+								{#if s}
+									{@const row = s as Record<string, unknown>}
+									<tr>
+										<td class="mono">{u}</td>
+										<td class="r mono">{fmtInt(row.n_long as number)}</td>
+										<td class="r mono">{fmtPct(row.mean_long as number)}</td>
+										<td class="r mono">{fmtPct(row.hit_rate_long as number)}</td>
+										<td class="r mono">{fmtPct(row.cum_long_only as number)}</td>
+										<td class="r mono">{fmtPct(row.max_dd_long_only as number)}</td>
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
+					<p class="pending mono">*Sequential event compound (not concurrent book).</p>
+				{/if}
+			</Panel>
+
+			<Panel title="Pre8 Threshold Grid" tag="OOS LONG FILTER" accent="green">
+				{#if !Object.keys(pre8GridUniv).length}
+					<p class="pending mono">Run <code>python -m aether.cli pre8-grid</code></p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>UNIV</th>
+								<th class="r">N OOS</th>
+								<th class="r">BASE MEAN</th>
+								<th class="r">BEST THR</th>
+								<th class="r">N</th>
+								<th class="r">MEAN</th>
+								<th class="r">HIT</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.entries(pre8GridUniv) as [u, body] (u)}
+								{@const best = (body.best_long_n20 as Record<string, unknown> | null) ?? null}
+								<tr>
+									<td class="mono">{u}</td>
+									<td class="r mono">{fmtInt(body.n_oos as number)}</td>
+									<td class="r mono">{fmtPct(body.base_mean as number)}</td>
+									<td class="r mono">{best ? fmtNum(best.thr as number, 2) : '—'}</td>
+									<td class="r mono">{best ? fmtInt(best.n as number) : '—'}</td>
+									<td class="r mono">{best ? fmtPct(best.mean as number) : '—'}</td>
+									<td class="r mono">{best ? fmtPct(best.hit as number) : '—'}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="pending mono">Best long thr among n≥20 OOS events. Not promoted.</p>
+				{/if}
+			</Panel>
+
+			<Panel title="MTF Research Artifacts" tag="READY PACKS" accent="cyan">
+				{#if !mtfResearchRows.length}
+					<p class="pending mono">
+						Run
+						<code>python -m aether.cli mtf-research --universe sp500 --interval 5min</code>
+					</p>
+				{:else}
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>BOOK</th>
+								<th>IV</th>
+								<th>LABEL</th>
+								<th class="r">SYMS</th>
+								<th class="r">ACC</th>
+								<th class="r">LIFT</th>
+								<th class="r">FWD@LONG</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each mtfResearchRows as r (r.key)}
+								<tr>
+									<td class="mono">{r.universe}</td>
+									<td class="mono">{r.interval}</td>
+									<td class="mono">{r.label}</td>
+									<td class="r mono">{fmtInt(r.n_symbols)}</td>
+									<td class="r mono">{fmtPct(r.accuracy)}</td>
+									<td class="r mono">{fmtPct(r.lift)}</td>
+									<td class="r mono">{fmtPct(r.mean_long)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</Panel>
+
 			<Panel title="Archive Inventory" tag="LIVE WHILE DOWNLOADS RUN" accent="amber">
 				{#if !archiveRows.length}
 					<p class="pending mono">
@@ -187,6 +386,31 @@
 	.dim {
 		color: var(--text-faint);
 		font-size: 10px;
+	}
+	.row2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+	.lbl {
+		font-size: 9px;
+		letter-spacing: 0.1em;
+		color: var(--text-mute);
+		margin-bottom: 4px;
+	}
+	.ok {
+		color: var(--pos, #3dffa8);
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.warn {
+		color: var(--amber, #ffb020);
+		font-size: 11px;
+		line-height: 1.4;
+	}
+	.pending {
+		font-size: 11px;
+		opacity: 0.8;
 	}
 	.logblk {
 		margin-bottom: 10px;
