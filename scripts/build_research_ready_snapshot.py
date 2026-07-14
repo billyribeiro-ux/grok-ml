@@ -108,6 +108,8 @@ def main() -> int:
         "iwm_eod_1h_15m": mtf["iwm"]["eod_complete"]
         and mtf["iwm"]["1hour"] >= 1972
         and mtf["iwm"]["15min"] >= 1972,
+        "iwm_5m": mtf["iwm"]["5min"] >= 1972,
+        "iwm_1m": mtf["iwm"]["1min"] >= 1972,
         "iwm_5m_1m": mtf["iwm"]["5min"] >= 1972 and mtf["iwm"]["1min"] >= 1972,
         "nasdaq_eod": mtf["nasdaq"]["eod_complete"],
         "nasdaq_full_mtf": all(
