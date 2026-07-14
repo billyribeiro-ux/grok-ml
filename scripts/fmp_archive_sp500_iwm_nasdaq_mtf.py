@@ -88,35 +88,46 @@ def _session() -> requests.Session:
     return s
 
 
-def get_json(path: str, params: dict | None = None, retries: int = 6):
+def get_json(
+    path: str, params: dict | None = None, retries: int = 6
+) -> tuple[object | None, str]:
+    """
+    Returns (payload, err).
+    err == "" on HTTP 200 with parsed JSON.
+    err is non-empty on network/429/non-200 exhaustion — caller must NOT treat as empty bars.
+    """
     p = dict(params or {})
     p["apikey"] = API_KEY
     sess = _session()
+    last_err = "unknown"
     for attempt in range(retries):
         try:
             r = sess.get(f"{BASE}/{path}", params=p, timeout=120)
         except Exception as e:
+            last_err = f"network:{type(e).__name__}"
             time.sleep(1.5 + attempt)
             if attempt == retries - 1:
                 with _print_lock:
                     print(f"  req err {path}: {e}", flush=True)
             continue
         if r.status_code == 429:
-            time.sleep(6 + attempt * 3)
+            last_err = "rate_limit"
+            time.sleep(8 + attempt * 5)
             continue
         if r.status_code != 200:
+            last_err = f"http_{r.status_code}"
             time.sleep(0.5 + attempt * 0.5)
             continue
         try:
-            return r.json()
+            return r.json(), ""
         except Exception:
-            return None
-    return None
+            return None, "json_parse"
+    return None, last_err
 
 def load_sp500() -> list[str]:
-    data = get_json("sp500-constituent")
-    if not isinstance(data, list):
-        raise SystemExit(f"sp500-constituent failed: {data}")
+    data, err = get_json("sp500-constituent")
+    if err or not isinstance(data, list):
+        raise SystemExit(f"sp500-constituent failed: err={err} data={data!r}")
     syms = sorted({str(x.get("symbol", "")).strip() for x in data if x.get("symbol")})
     out = LACIE / "sp500_full"
     out.mkdir(parents=True, exist_ok=True)
@@ -329,51 +340,89 @@ def trim_eod_to_window(universe: str, symbols: list[str]) -> None:
     print(f"[{universe}] trimmed {n} EOD files to window", flush=True)
 
 
-def fetch_chart(sym: str, interval: str) -> list[dict]:
-    """Pull chart bars for interval over START..END in chunks."""
+def fetch_chart(sym: str, interval: str) -> tuple[list[dict], str]:
+    """
+    Pull chart bars for interval over START..END in chunks.
+    Returns (bars, status) where status is:
+      - 'ok'    : at least one bar
+      - 'empty' : every successful HTTP 200 chunk was empty (true no data)
+      - 'fail'  : request failures (429/network/http) dominated — do NOT write empty
+    """
     chunk_days = CHUNK[interval]
     frames: list[dict] = []
+    chunks_ok = 0
+    chunks_empty = 0
+    chunks_fail = 0
+    last_err = ""
     cur = START
     while cur <= END:
         end = min(cur + timedelta(days=chunk_days - 1), END)
-        data = get_json(
+        data, err = get_json(
             f"historical-chart/{interval}",
             {"symbol": sym, "from": cur.isoformat(), "to": end.isoformat()},
         )
         if SLEEP > 0:
             time.sleep(SLEEP)
-        if isinstance(data, list) and data:
-            for row in data:
-                if not isinstance(row, dict):
-                    continue
-                frames.append(
-                    {
-                        "symbol": sym,
-                        "date": row.get("date"),
-                        "open": row.get("open"),
-                        "high": row.get("high"),
-                        "low": row.get("low"),
-                        "close": row.get("close"),
-                        "volume": row.get("volume"),
-                    }
-                )
+        if err:
+            chunks_fail += 1
+            last_err = err
+            # under hard rate-limit, abort early so we don't burn hours writing fails
+            if err == "rate_limit" and chunks_fail >= 3 and chunks_ok == 0 and not frames:
+                return [], "fail"
+        elif isinstance(data, list):
+            if data:
+                chunks_ok += 1
+                for row in data:
+                    if not isinstance(row, dict):
+                        continue
+                    frames.append(
+                        {
+                            "symbol": sym,
+                            "date": row.get("date"),
+                            "open": row.get("open"),
+                            "high": row.get("high"),
+                            "low": row.get("low"),
+                            "close": row.get("close"),
+                            "volume": row.get("volume"),
+                        }
+                    )
+            else:
+                chunks_empty += 1
+                chunks_ok += 1  # successful empty response
+        else:
+            chunks_fail += 1
+            last_err = last_err or "bad_payload"
         cur = end + timedelta(days=1)
-    if not frames:
-        return []
-    seen: set[str] = set()
-    out: list[dict] = []
-    for r in sorted(frames, key=lambda x: x.get("date") or ""):
-        k = str(r.get("date") or "")
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        out.append(r)
-    return out
+
+    if frames:
+        seen: set[str] = set()
+        out: list[dict] = []
+        for r in sorted(frames, key=lambda x: x.get("date") or ""):
+            k = str(r.get("date") or "")
+            if not k or k in seen:
+                continue
+            seen.add(k)
+            out.append(r)
+        return out, "ok"
+
+    # no bars: only honest empty if we got successful empties and no hard fails
+    if chunks_fail > 0 and chunks_ok == 0:
+        return [], "fail"
+    if chunks_fail > max(chunks_ok, 1):
+        return [], "fail"
+    if chunks_ok > 0:
+        return [], "empty"
+    return [], "fail" if last_err else "empty"
 
 
-def _write_chart(path: Path, sym: str, interval: str, bars: list[dict]) -> str:
-    """Write bars or honest empty marker. Returns 'ok' | 'empty'."""
-    if not bars:
+def _write_chart(path: Path, sym: str, interval: str, bars: list[dict], status: str) -> str:
+    """
+    Write bars or honest empty marker.
+    Returns 'ok' | 'empty' | 'fail'. Never writes empty on fail (preserves re-pull).
+    """
+    if status == "fail":
+        return "fail"
+    if status == "empty" or not bars:
         path.write_text(
             json.dumps(
                 {
@@ -382,7 +431,8 @@ def _write_chart(path: Path, sym: str, interval: str, bars: list[dict]) -> str:
                     "window": f"{START}→{END}",
                     "bars": [],
                     "empty": True,
-                    "note": "FMP returned no bars for this window/interval",
+                    "confirmed_empty": True,
+                    "note": "FMP HTTP 200 returned no bars for this window/interval",
                     "pulled_at": now(),
                 },
                 indent=2,
@@ -397,12 +447,9 @@ def chart_is_complete(path: Path, interval: str) -> bool:
     """
     True if we already have a definitive result on disk:
       - real bar list with data, OR
-      - honest empty marker (FMP returned nothing for this window).
+      - confirmed empty marker (HTTP 200 no bars — not a 429 failure).
 
-    Empty markers MUST count as complete — otherwise full-book NASDAQ
-    re-pulls thousands of permanently-empty funds/delisteds forever and
-    never advances to the next interval.
-    Corrupt/tiny non-marker files are incomplete and get re-pulled.
+    Empty markers from rate-limit failures must NOT count as complete.
     """
     if not path.exists():
         return False
@@ -411,8 +458,15 @@ def chart_is_complete(path: Path, interval: str) -> bool:
     except Exception:
         return False
     if isinstance(raw, dict):
-        # honest empty from a prior successful probe — do not loop forever
         if raw.get("empty") is True:
+            # reject failure stubs / unconfirmed empties
+            if raw.get("error") or raw.get("failed") or raw.get("rate_limited"):
+                return False
+            # legacy empties without confirmed_empty still count (pre-fix delisteds)
+            # but note must not claim limit errors
+            note = str(raw.get("note") or "").lower()
+            if "limit" in note or "429" in note or "rate" in note:
+                return False
             return True
         bars = raw.get("bars") or raw.get("historical") or []
         return isinstance(bars, list) and len(bars) > 0
@@ -453,8 +507,8 @@ def archive_charts(universe: str, symbols: list[str], intervals: list[str]) -> N
         def one(sym: str) -> tuple[str, str]:
             path = chart_path(universe, interval, sym)
             try:
-                bars = fetch_chart(sym, interval)
-                status = _write_chart(path, sym, interval, bars)
+                bars, fetch_status = fetch_chart(sym, interval)
+                status = _write_chart(path, sym, interval, bars, fetch_status)
                 return sym, status
             except Exception as e:
                 with _print_lock:
@@ -481,6 +535,18 @@ def archive_charts(universe: str, symbols: list[str], intervals: list[str]) -> N
                             f"ok={o} empty={e} fail={f} (prior_skip={skip})",
                             flush=True,
                         )
+                # circuit breaker: if FMP is dead, stop burning the queue
+                if d >= 20 and ok == 0 and empty == 0 and fail >= 20:
+                    with _print_lock:
+                        print(
+                            f"  [{universe}/{interval}] CIRCUIT BREAK: "
+                            f"20+ consecutive fails (likely FMP limit/expiry) — stop interval",
+                            flush=True,
+                        )
+                    # cancel remaining
+                    for fut2 in futs:
+                        fut2.cancel()
+                    break
         print(
             f"[{universe}] {interval} done ok={ok} skip={skip} empty={empty} fail={fail}",
             flush=True,
