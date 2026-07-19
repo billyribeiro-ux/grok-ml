@@ -132,6 +132,16 @@ def cmd_engine_flight(argv: list[str] | None = None) -> None:
         help="write stamped telemetry only; do not overwrite mission latest_flight.json",
     )
     parser.add_argument(
+        "--exclude-feature-prefix",
+        action="append",
+        default=None,
+        metavar="PREFIX",
+        help=(
+            "drop feature columns starting with PREFIX (repeatable). "
+            "Use 'fund_' to exclude the non-point-in-time TTM freeze."
+        ),
+    )
+    parser.add_argument(
         "--json-dir",
         default=None,
         help="per-symbol OHLCV json directory (liquid/bonds/etn) instead of eod_bulk",
@@ -198,6 +208,7 @@ def cmd_engine_flight(argv: list[str] | None = None) -> None:
         flight_name=name,
         risk=risk,
         promote_latest=not args.no_promote,
+        exclude_feature_prefixes=args.exclude_feature_prefix,
     )
     stats = {
         **result.backtest.stats,

@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
 # Horizons in trading days
 DEFAULT_HORIZONS = (1, 5, 20)
+
+_HORIZON_RE = re.compile(r"_(\d+)d$")
+
+
+def label_horizon(label_col: str) -> int:
+    """
+    Trading-day horizon encoded in a label name, e.g. 'y_up_20d' -> 20.
+
+    The purge gap between train and test must be at least this large: a row at
+    index i has its label resolved at i+h, so training on rows within h of the
+    cut leaks outcomes from inside the test window.
+    """
+    m = _HORIZON_RE.search(label_col)
+    if not m:
+        raise ValueError(
+            f"cannot infer horizon from label column {label_col!r} — "
+            "expected a name ending in '_<n>d' (e.g. 'y_up_5d')"
+        )
+    return int(m.group(1))
 
 
 def add_forward_labels(

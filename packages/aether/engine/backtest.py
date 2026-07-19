@@ -66,13 +66,55 @@ class PaperBroker:
         df["date"] = pd.to_datetime(df["date"]).dt.normalize()
         dates = sorted(df["date"].unique())
 
+        # Signals decided on bar t are executed on bar t+1. Features at t are
+        # computed from t's close (features/daily.py), so filling at t's close
+        # would mean observing the closing print and transacting at it — not
+        # executable. Holding them one bar and filling at the next open is the
+        # earliest price genuinely available after the decision.
+        pending: list[Signal] = []
+
         for ts in dates:
             d = pd.Timestamp(ts).date()
             day = df[df["date"] == ts]
             # mark-to-market
             self._mark(day, d)
             self._exits(day, d)
-            # one signal per symbol max
+
+            # --- execute signals decided on the PREVIOUS bar, at this bar's open
+            if pending:
+                px_by_sym = {}
+                for _, row in day.iterrows():
+                    if "open" not in row or pd.isna(row["open"]):
+                        # Fail loud: silently falling back to close would
+                        # reintroduce the same-bar fill this lag exists to remove.
+                        raise ValueError(
+                            f"{row['symbol']} on {d}: missing 'open'; cannot fill "
+                            "a lagged decision without reintroducing same-bar execution"
+                        )
+                    px_by_sym[row["symbol"]] = float(row["open"])
+                for sig in pending:
+                    if sig.symbol in self.portfolio.positions:
+                        continue
+                    px = px_by_sym.get(sig.symbol)
+                    if px is None or px <= 0:
+                        # Not tradable on the fill bar (halt/delist/gap in data).
+                        self.rejections.append(
+                            {"date": d.isoformat(), "symbol": sig.symbol, "reason": "not_tradable_on_fill_bar"}
+                        )
+                        continue
+                    unc = float(sig.meta.get("uncertainty", 0.5))
+                    decision = self.risk.evaluate(
+                        sig, self.portfolio, px, regime_uncertainty=unc
+                    )
+                    if not decision.allowed:
+                        self.rejections.append(
+                            {"date": d.isoformat(), "symbol": sig.symbol, "reason": decision.reason}
+                        )
+                        continue
+                    self._enter(sig, decision.size_shares, px, d)
+                pending = []
+
+            # --- decide from THIS bar's features; queue for the next bar
             for _, row in day.iterrows():
                 sig = self.policy.decide_row(row)
                 if sig is None:
@@ -82,15 +124,7 @@ class PaperBroker:
                     continue
                 if sig.symbol in self.portfolio.positions:
                     continue
-                px = float(row["close"])
-                unc = float(sig.meta.get("uncertainty", 0.5))
-                decision = self.risk.evaluate(sig, self.portfolio, px, regime_uncertainty=unc)
-                if not decision.allowed:
-                    self.rejections.append(
-                        {"date": d.isoformat(), "symbol": sig.symbol, "reason": decision.reason}
-                    )
-                    continue
-                self._enter(sig, decision.size_shares, px, d)
+                pending.append(sig)
 
             self._equity_rows.append(
                 {

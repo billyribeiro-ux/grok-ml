@@ -13,11 +13,12 @@ import pandas as pd
 from aether.engine.backtest import BacktestResult, PaperBroker
 from aether.engine.calibration import reliability_table
 from aether.engine.data_source import MarketDataSource
-from aether.engine.labels import add_forward_labels
+from aether.engine.execution import CostModel
+from aether.engine.labels import add_forward_labels, label_horizon
 from aether.engine.mock_data import MockDailySource
 from aether.engine.risk import RiskConfig, RiskGovernor
 from aether.engine.scored_policy import ScoredPolicy
-from aether.engine.scorer import LogisticScorer
+from aether.engine.scorer import FEATURE_COLS as SCORER_FEATURE_COLS, LogisticScorer
 from aether.engine.state import estimate_regime_panel
 from aether.engine.telemetry import flight_from_backtest
 from aether.features.daily import build_daily_features
@@ -51,6 +52,8 @@ def run_offline_pipeline(
     label_col: str = "y_up_5d",
     risk: RiskConfig | None = None,
     promote_latest: bool = True,
+    exclude_feature_prefixes: Sequence[str] | None = None,
+    costs: CostModel | None = None,
 ) -> PipelineResult:
     """
     Fully offline engine flight using MockDailySource by default.
@@ -104,15 +107,33 @@ def run_offline_pipeline(
     cut_idx = int(len(dates) * train_frac)
     cut_idx = min(max(cut_idx, 10), len(dates) - 5)
     cut = dates[cut_idx]
-    # purge: drop last purge_days of train labels that leak into OOS horizon
+    # purge: drop last purge_days of train labels that leak into OOS horizon.
+    # The gap must cover the label horizon — a row at i resolves its label at
+    # i+h, so any train row within h of the cut carries an outcome measured
+    # inside the test window. Fail loud rather than silently widening: an
+    # under-purged run is not a run whose number should be quietly corrected.
     purge = max(0, int(purge_days))
+    horizon = label_horizon(label_col)
+    if purge < horizon:
+        raise ValueError(
+            f"purge_days={purge} is shorter than the {label_col} horizon "
+            f"({horizon} trading days). Training rows within {horizon} days of "
+            f"the cut resolve their labels inside the OOS window — that is "
+            f"leakage. Re-run with --purge-days {horizon} or higher."
+        )
     train_end_idx = max(0, cut_idx - purge)
     train_end = dates[train_end_idx] if train_end_idx < len(dates) else cut
 
     train = labeled[labeled["date"] < train_end]
     test = labeled[labeled["date"] >= cut]
 
-    scorer = LogisticScorer(label_col=label_col).fit(train)
+    # Feature set actually used, after any requested exclusions (e.g. non-PIT
+    # fund_* freezes). Recorded in telemetry so a run's inputs are recoverable.
+    drop = tuple(exclude_feature_prefixes or ())
+    feature_cols = tuple(
+        c for c in SCORER_FEATURE_COLS if not (drop and c.startswith(drop))
+    )
+    scorer = LogisticScorer(label_col=label_col, feature_cols=feature_cols).fit(train)
     test_scored = scorer.score_frame(test)
 
     cal = reliability_table(
@@ -123,10 +144,15 @@ def run_offline_pipeline(
 
     policy = ScoredPolicy(scorer=scorer)
     risk_cfg = risk or RiskConfig()
+    # Construct the cost model explicitly so it is recordable in telemetry.
+    # Previously PaperBroker defaulted it internally and no caller passed one,
+    # so every backtest silently ran at the defaults with no way to tell.
+    cost = costs or CostModel()
     broker = PaperBroker(
         start_equity_usd=start_equity_usd,
         policy=policy,
         risk=RiskGovernor(risk_cfg),
+        costs=cost,
     )
     test_feat = features[features["date"] >= cut].dropna(subset=["ret_1d"])
     test_feat = test_feat.merge(
@@ -171,12 +197,31 @@ def run_offline_pipeline(
                 "n_oos_feature_rows": int(len(oos_feat)),
                 "n_unique_dates": int(len(dates)),
                 "regime_daily": regime_snap,
+                # Provenance: which features were requested, which the scorer
+                # actually found in the frame, and what was deliberately excluded.
+                # A silently-narrowed feature set is otherwise unrecoverable.
+                # fit() narrows feature_cols to those actually present in the
+                # frame, so post-fit it *is* the realized set.
+                "feature_cols_requested": list(feature_cols),
+                "feature_cols_used": list(scorer.feature_cols),
+                "feature_cols_missing": sorted(set(feature_cols) - set(scorer.feature_cols)),
+                "feature_cols_excluded_prefixes": list(drop),
                 "risk": {
                     "max_positions": risk_cfg.max_positions,
                     "max_risk_per_trade": risk_cfg.max_risk_per_trade,
                     "min_confidence": risk_cfg.min_confidence,
                     "max_drawdown": risk_cfg.max_drawdown,
                     "max_day_loss": risk_cfg.max_day_loss,
+                    "max_gross_exposure": risk_cfg.max_gross_exposure,
+                    "max_uncertainty": risk_cfg.max_uncertainty,
+                    "min_edge_after_cost": risk_cfg.min_edge_after_cost,
+                },
+                # CostModel was previously recorded nowhere, so every backtest
+                # silently ran at the defaults with no way to tell after the fact.
+                "cost_model": {
+                    "half_spread_bps": cost.half_spread_bps,
+                    "slip_bps": cost.slip_bps,
+                    "adv_participation_penalty_bps": cost.adv_participation_penalty_bps,
                 },
             },
         )

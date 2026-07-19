@@ -52,8 +52,12 @@ def build_intraday_features(panel: pd.DataFrame, *, min_bars: int = 40) -> pd.Da
         # labels: next bar / 5-bar direction (honest future; train/test must cut in time)
         fwd1 = c.shift(-1) / c - 1.0
         fwd5 = c.shift(-5) / c - 1.0
-        g["y_up_1"] = (fwd1 > 0).astype(float)
-        g["y_up_5"] = (fwd5 > 0).astype(float)
+        # Keep NaN where the forward return is unknown (the last 1 / 5 bars).
+        # `(fwd > 0).astype(float)` would map NaN -> 0.0, inventing a "price
+        # went down" label for an outcome that has not happened yet, and the
+        # caller's dropna guard would then be a no-op.
+        g["y_up_1"] = np.where(fwd1.isna(), np.nan, (fwd1 > 0).astype(float))
+        g["y_up_5"] = np.where(fwd5.isna(), np.nan, (fwd5 > 0).astype(float))
         g["fwd_ret_1"] = fwd1
         g["fwd_ret_5"] = fwd5
         frames.append(g)

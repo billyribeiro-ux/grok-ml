@@ -99,6 +99,9 @@ def test_offline_pipeline_runs():
         start_equity_usd=100_000,
         write_telemetry=True,
         offline_telemetry=True,
+        # Must not promote: promote_latest defaults True, so without this the
+        # test overwrites the cockpit's mission latest_flight.json with mock data.
+        promote_latest=False,
     )
     assert len(result.features) > 0
     assert "ret_1d" in result.features.columns
