@@ -1,0 +1,3 @@
+[console_scripts]
+aether-f1-features = aether.cli:cmd_f1_features
+aether-integrity = aether.cli:cmd_integrity

@@ -8,6 +8,7 @@ credentials*
 
 # local data (lives on LaCie / regenerable)
 data/**
+!data/reference/**
 !data/.gitkeep
 !data/README.md
 Aether-data

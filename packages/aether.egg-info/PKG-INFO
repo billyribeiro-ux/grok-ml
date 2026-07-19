@@ -1,0 +1,66 @@
+Metadata-Version: 2.4
+Name: aether
+Version: 0.1.0
+Summary: Aether market intelligence engine — F0/F1 data + feature spine
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: pandas>=2.0
+Requires-Dist: pyarrow>=14.0
+Requires-Dist: numpy>=1.26
+Requires-Dist: python-dotenv>=1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+
+# Aether / grok-ml
+
+Market Intelligence Brain — day-trading tops/bottoms decoder (ML + self-learning design).
+
+## Repo contents
+- `packages/aether/` — **engine spine (F0/F1)**: paths, integrity, loaders, daily features, feature store
+- `scripts/` — FMP Ultimate + Databento download pipelines
+- `docs/` — Mars-grade vision, theoretical ceiling, V∞ architecture
+- Data lives on external LaCie: `/Volumes/LaCie/Aether/` (not in git)
+
+## Design docs (read in order)
+1. `docs/AETHER_MARS_GRADE_VISION.md`
+2. `docs/AETHER_ENGINE_THEORETICAL_CEILING.md`
+3. `docs/AETHER_ENGINE_V_INFINITY.md`
+
+## Setup
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pip install requests tqdm databento   # download scripts
+cp .env.example .env   # add API keys
+```
+
+## F0 / F1 (engine spine)
+Requires LaCie mounted at `/Volumes/LaCie/Aether`.
+
+```bash
+# F0 — integrity inventory → LaCie data/processed/integrity/
+python -m aether.cli integrity
+
+# F1 — daily features for core symbols from eod-bulk → feature store
+python -m aether.cli f1 --start 2019-01-01 --end 2026-07-10
+
+# unit tests (no LaCie required)
+pytest -q
+
+# offline engine flight (mock data — no LaCie, no downloads)
+python -m aether.cli engine-flight
+```
+
+### Engine (data-pluggable)
+- `packages/aether/engine/` — types, money (cents), data protocol, mock source,
+  labels, regime state, risk governor, policy (STAND_DOWN default), execution costs,
+  paper backtest, offline pipeline
+- Swap `MockDailySource` → `LacieEodBulkSource` later without rewriting the brain
+
+Processed output (LaCie, not git):
+- `/Volumes/LaCie/Aether/data/processed/feature_store/`
+- `/Volumes/LaCie/Aether/data/processed/integrity/`
+
+## Remote
+https://github.com/billyribeiro-ux/grok-ml.git

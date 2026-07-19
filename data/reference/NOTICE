@@ -1,0 +1,16 @@
+sp500_historical_constituents.csv
+---------------------------------
+Source : https://github.com/AI4Finance-Foundation/FinRL-Trading
+License: Apache License 2.0
+Copyright 2026 AI4Finance Foundation
+
+Unmodified. Point-in-time S&P 500 membership snapshots, 1996-01-02 to
+2026-04-17 (2,709 rows). Verified survivorship-free: 1,199 distinct tickers
+ever appear, 503 in the final snapshot; Lehman (LEHMQ), Enron (ENRNQ),
+WorldCom (WCOEQ), SVB (SIVB), First Republic (FRC) all present with
+day-accurate exit dates.
+
+CAVEAT: entities are keyed by their TERMINAL ticker, not the as-traded
+symbol (Lehman appears as LEHMQ across its entire 1998-2008 index life, not
+LEH). A raw-symbol join silently drops renamed entities. Post-2018 snapshot
+resolution degrades to a 121-day maximum gap.
