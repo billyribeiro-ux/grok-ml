@@ -127,8 +127,19 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
         tv = pd.to_numeric(df["trail_vol_20"], errors="coerce")
         df["trail_vol_20"] = tv.clip(lower=1e-4)
 
-    # Winsorize insane returns (bad prints / splits) — keep honest rows, drop junk tails
-    MAX_ABS_RET = 0.50  # ±50% 1d/8d move kept for specialist training
+    # NOTE: there is deliberately no outcome-magnitude filter here.
+    #
+    # This function runs BEFORE the train/test split, so dropping rows by
+    # |pnl| would be outcome-conditioned selection: you cannot know at entry
+    # whether an event will move >50%, and earnings prints are exactly where
+    # those moves occur. Filtering them out deletes the loss tail by hindsight
+    # and every reported hit-rate / mean-pnl / drawdown becomes a statement
+    # about a population that excludes the risk being taken.
+    #
+    # Genuine bad prints (splits, vendor errors) are a DATA-QUALITY problem and
+    # must be caught on features (bar coherence, price level), never on the
+    # label. For training stability, clip the TRAIN labels only — see
+    # clip_train_pnl() below.
 
     if mode == "post1d":
         label = "y_up_post_1d"
@@ -138,7 +149,6 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
             raise ValueError("event table missing post_ret_1d — rebuild event tables")
         df = df.dropna(subset=[pnl]).copy()
         df[pnl] = pd.to_numeric(df[pnl], errors="coerce")
-        df = df[df[pnl].abs() <= MAX_ABS_RET].copy()
         df[label] = (df[pnl].astype(float) > 0).astype(float)
         df["pnl"] = df[pnl].astype(float)
     elif mode == "pre8":
@@ -156,7 +166,6 @@ def prepare_frame(events: pd.DataFrame, mode: Mode) -> tuple[pd.DataFrame, str, 
                 df[c] = np.nan
         df = df.dropna(subset=[pnl]).copy()
         df[pnl] = pd.to_numeric(df[pnl], errors="coerce")
-        df = df[df[pnl].abs() <= MAX_ABS_RET].copy()
         df[label] = (df[pnl].astype(float) > 0).astype(float)
         df["pnl"] = df[pnl].astype(float)
     else:
@@ -197,6 +206,14 @@ def run_earnings_specialist(
 
     train = df[df["earnings_date"] < cut].copy()
     test = df[df["earnings_date"] >= cut].copy()
+
+    # Clip TRAIN labels only. This bounds the influence of extreme prints on the
+    # fit without touching the evaluation population — the test set keeps its
+    # full tails, so reported PnL reflects the risk actually taken. Clipping is
+    # not dropping: the row still trains, at a bounded magnitude.
+    TRAIN_CLIP = 0.50
+    train["pnl"] = train["pnl"].clip(-TRAIN_CLIP, TRAIN_CLIP)
+
     train, test = _attach_train_z(train, test)
 
     for c in feature_cols:
